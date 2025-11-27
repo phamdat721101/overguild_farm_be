@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id              String           @id @default(dbgenerated("gen_random_uuid()"))
+  walletAddress   String           @unique(map: "users_walletAddress_key") @map("wallet_address")
+  username        String?
+  xp              Int              @default(0)
+  reputationScore Int              @default(0) @map("reputation_score")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  network         String           @default("sui")
+  avatar          String?
+  updatedAt       DateTime         @default(now()) @updatedAt @map("updated_at")
+  inventory       InventoryItem[]
+  lands           Land[]
+  missions        MissionLog[]
+  soulboundTokens SoulboundToken[]
+
+  @@map("users")
+}
+
+model Land {
+  id          String   @id @default(dbgenerated("gen_random_uuid()"))
+  userId      String   @map("user_id")
+  plotIndex   Int      @map("plot_index")
+  soilQuality Json?    @default("{\"fertility\": 50, \"hydration\": 50}") @map("soil_quality")
+  plant_id    String?  @unique
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plant       Plant?
+
+  @@unique([userId, plotIndex])
+  @@map("lands")
+}
+
+model Plant {
+  id               String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  landId           String   @unique @map("land_id")
+  type             String
+  stage            String
+  lastInteractedAt DateTime @default(now()) @map("last_interacted_at")
+  plantedAt        DateTime @default(now()) @map("planted_at")
+  interactions     Int      @default(0)
+  githubCommits    Int      @default(0) @map("github_commits")
+  isGoldBranch     Boolean  @default(false) @map("is_gold_branch")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
+  land             Land     @relation(fields: [landId], references: [id], onDelete: Cascade)
+
+  @@map("plants")
+}
+
+model InventoryItem {
+  id        String   @id @default(dbgenerated("gen_random_uuid()"))
+  userId    String   @map("user_id")
+  itemType  String   @map("item_type")
+  amount    Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, itemType])
+  @@map("inventory_items")
+}
+
+model MissionLog {
+  id          String    @id @default(dbgenerated("gen_random_uuid()"))
+  userId      String    @map("user_id")
+  missionType String    @map("mission_type")
+  progress    Int       @default(0)
+  target      Int
+  status      String
+  resetAt     DateTime? @map("reset_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("mission_logs")
+}
+
+model SoulboundToken {
+  id       String   @id @default(dbgenerated("gen_random_uuid()"))
+  userId   String   @map("user_id")
+  name     String
+  issuedAt DateTime @default(now()) @map("issued_at")
+  metadata Json?
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("soulbound_tokens")
+}
