@@ -17,10 +17,18 @@ model User {
   createdAt       DateTime         @default(now()) @map("created_at")
   network         String           @default("sui")
   avatar          String?
+  bio             String?
+  twitter         String?
+  github          String?
+  discord         String?
   updatedAt       DateTime         @default(now()) @updatedAt @map("updated_at")
-  inventory       InventoryItem[]
+  
+  seeds           Seed[]
+  inventory       Inventory[]
+  inventoryItems  InventoryItem[]
   lands           Land[]
-  missions        MissionLog[]
+  missions        Mission[]
+  missionLogs     MissionLog[]
   soulboundTokens SoulboundToken[]
 
   @@map("users")
@@ -58,6 +66,38 @@ model Plant {
   @@map("plants")
 }
 
+// --- SEED ---
+model Seed {
+  id        String   @id @default(dbgenerated("gen_random_uuid()"))
+  userId    String   @map("user_id")
+  type      String
+  rarity    String   @default("COMMON")
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@map("seeds")
+}
+
+// --- INVENTORY (items like water, fertilizer) ---
+model Inventory {
+  id        String   @id @default(dbgenerated("gen_random_uuid()"))
+  userId    String   @map("user_id")
+  itemType  String   @map("item_type")
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, itemType])
+  @@map("inventory")
+}
+
+// --- INVENTORY ITEM (for event rewards) ---
 model InventoryItem {
   id        String   @id @default(dbgenerated("gen_random_uuid()"))
   userId    String   @map("user_id")
@@ -71,6 +111,23 @@ model InventoryItem {
   @@map("inventory_items")
 }
 
+// --- MISSION ---
+model Mission {
+  id          String   @id @default(dbgenerated("gen_random_uuid()"))
+  userId      String   @map("user_id")
+  missionType String   @map("mission_type")
+  status      String   @default("active")
+  progress    Int      @default(0)
+  target      Int
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("missions")
+}
+
+// --- MISSION LOG ---
 model MissionLog {
   id          String    @id @default(dbgenerated("gen_random_uuid()"))
   userId      String    @map("user_id")

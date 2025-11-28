@@ -43,9 +43,33 @@ export class UserController {
   }
 
   @Patch('profile')
-  @ApiOperation({ summary: 'Update user profile' })
-  @ApiResponse({ status: 200, description: 'Profile updated successfully' })
-  @ApiResponse({ status: 400, description: 'Invalid input data' })
+  @ApiOperation({ 
+    summary: 'Update user profile',
+    description: 'Update username, avatar, bio, social links, and network preference'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Profile updated successfully',
+    schema: {
+      example: {
+        id: '69aea000-8ba2-494c-bc0f-d3ed6b3741b3',
+        walletAddress: '0xd5ff68d3176e0bf698563e694ba5e7133584754c',
+        network: 'sui',
+        username: 'UpdatedName',
+        avatar: 'https://avatar.iran.liara.run/public/42',
+        bio: 'Passionate Web3 builder',
+        twitter: 'https://twitter.com/username',
+        github: 'https://github.com/username',
+        discord: 'username#1234',
+        xp: 150,
+        reputationScore: 20,
+        createdAt: '2025-11-26T15:48:58.844Z',
+        updatedAt: '2025-11-27T19:00:00.000Z'
+      }
+    }
+  })
+  @ApiResponse({ status: 400, description: 'Invalid input data (validation failed)' })
+  @ApiResponse({ status: 401, description: 'Unauthorized - Invalid or missing JWT' })
   updateProfile(@CurrentUser() user: any, @Body() dto: UpdateProfileDto) {
     return this.userService.updateProfile(user.sub, dto);
   }

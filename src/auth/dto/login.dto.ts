@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEthereumAddress, IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsEthereumAddress, IsIn, IsOptional, IsString } from 'class-validator';
 
 export class LoginDto {
   @ApiProperty({ 
@@ -8,22 +8,6 @@ export class LoginDto {
   })
   @IsEthereumAddress()
   walletAddress: string;
-
-  @ApiProperty({ 
-    example: '0xa5fd281641b55bda34...',
-    description: 'Signature from wallet.signMessage()'
-  })
-  @IsString()
-  @IsNotEmpty()
-  signature: string;
-
-  @ApiProperty({ 
-    example: '0x5a813c4167584f8fd8db837fcb103cf975ec2d9c66a776d436d9d7bbcfaf8845',
-    description: 'Nonce from /auth/challenge'
-  })
-  @IsString()
-  @IsNotEmpty()
-  nonce: string;
 
   @ApiPropertyOptional({ 
     example: 'SuiPlayer',
