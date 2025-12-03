@@ -85,64 +85,13 @@ export class AuthService {
     };
   }
 
-  async login(dto: LoginDto) {
-    const { walletAddress, signature, nonce, username, network, avatar } = dto;
+async login(dto: LoginDto) {
+    const { walletAddress } = dto;
     const wallet = walletAddress.toLowerCase();
 
-    const stored = this.nonces.get(wallet);
-    if (!stored || stored.nonce !== nonce) {
-      throw new UnauthorizedException('Invalid or expired nonce');
-    }
-    if (Date.now() > stored.expiresAt) {
-      this.nonces.delete(wallet);
-      throw new UnauthorizedException('Nonce expired');
-    }
-
-    let recovered: string;
-    try {
-      recovered = ethers.verifyMessage(stored.message, signature);
-    } catch (e) {
-      throw new UnauthorizedException('Invalid signature');
-    }
-
-    if (recovered.toLowerCase() !== wallet) {
-      throw new UnauthorizedException('Signature does not match wallet');
-    }
-
-    this.nonces.delete(wallet);
-
-    const user = await this.prisma.user.upsert({
+    // Tìm user đã tồn tại
+    const user = await this.prisma.user.findUnique({
       where: { walletAddress: wallet },
-      create: {
-        walletAddress: wallet,
-        network: network || 'sui',
-        username: username || null,
-        avatar: avatar || null,
-        lands: {
-          create: {
-            plotIndex: 0,
-            soilQuality: { fertility: 50, hydration: 50 },
-            plant: {
-              create: {
-                type: 'SOCIAL',
-                stage: 'SEED',
-                lastInteractedAt: new Date(),
-                plantedAt: new Date(),
-                interactions: 0,
-                githubCommits: 0,
-                isGoldBranch: false,
-                diggingDuration: 1,
-                growingDuration: 12,
-              },
-            },
-          },
-        },
-      },
-      update: {
-        ...(username && { username }),
-        ...(avatar && { avatar }),
-        ...(network && { network }),
-      },
       include: {
         lands: {
           include: {
@@ -152,6 +101,12 @@ export class AuthService {
       },
     });
 
+    if (!user) {
+      throw new NotFoundException('User not found. Please register first.');
+    }
+
+    // Login chỉ dựa trên walletAddress,
+    // các thông tin profile sẽ được cập nhật qua user/profile API
     const payload = { sub: user.id, walletAddress: user.walletAddress };
     const accessToken = await this.jwtService.signAsync(payload);
 
@@ -168,7 +123,6 @@ export class AuthService {
         landsCount: user.lands.length,
         plantsCount: user.lands.filter(l => l.plant !== null).length,
       },
-      isNewUser: user.lands.length === 1,
     };
   }
 }
