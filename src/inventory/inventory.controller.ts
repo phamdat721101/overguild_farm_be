@@ -30,40 +30,69 @@ export class InventoryController {
 
   @Get()
   @ApiOperation({
-    summary: "Get user inventory",
+    summary: "📦 Get user inventory",
     description:
-      "Get complete inventory with optional filtering by category or search term",
+      "Get complete inventory with optional filtering by category or search term.\n\n" +
+      "**Filters:**\n" +
+      "- `category`: SEEDS, FRUITS, FERTILIZERS, EVENT_REWARDS, CONSUMABLES, ALL\n" +
+      "- `search`: Partial match on item type (e.g., 'RARE' finds SEED_RARE, FERTILIZER_RARE)\n\n" +
+      "**Response includes:**\n" +
+      "- Full item list with metadata (name, rarity, icon)\n" +
+      "- Grouped view by category\n" +
+      "- Summary statistics",
   })
-  @ApiQuery({ name: "category", enum: ItemCategory, required: false })
-  @ApiQuery({ name: "search", type: String, required: false })
+  @ApiQuery({
+    name: "category",
+    enum: ItemCategory,
+    required: false,
+    description: "Filter by item category",
+    example: "SEEDS",
+  })
+  @ApiQuery({
+    name: "search",
+    type: String,
+    required: false,
+    description: "Search by item type (partial match)",
+    example: "COMMON",
+  })
   @ApiResponse({
     status: 200,
-    description: "Returns user inventory",
+    description: "Returns user inventory with rich metadata",
     schema: {
       example: {
-        userId: "uuid",
+        userId: "69aea000-8ba2-494c-bc0f-d3ed6b3741b3",
         inventory: [
           {
-            id: "uuid",
+            id: "0d5da75d-b968-49a6-8b93-176d4db36c1e",
             itemType: "SEED_COMMON",
             amount: 15,
             name: "Common Seed",
             rarity: "COMMON",
             category: "SEEDS",
             icon: "🌱",
-            createdAt: "2025-12-03T...",
-            updatedAt: "2025-12-03T...",
+            createdAt: "2025-12-03T18:31:58.525Z",
+            updatedAt: "2025-12-03T18:31:58.525Z",
+          },
+          {
+            id: "a6b7d256-fcd0-44e3-804f-7b84f1da6395",
+            itemType: "FRUIT",
+            amount: 20,
+            name: "Fruit",
+            rarity: "COMMON",
+            category: "FRUITS",
+            icon: "🍎",
+            createdAt: "2025-12-03T18:32:09.684Z",
+            updatedAt: "2025-12-03T18:32:09.684Z",
           },
         ],
         grouped: {
-          SEEDS: [],
-          FRUITS: [],
-          FERTILIZERS: [],
+          SEEDS: [{ itemType: "SEED_COMMON", amount: 15 }],
+          FRUITS: [{ itemType: "FRUIT", amount: 20 }],
         },
         summary: {
-          totalItems: 50,
-          totalTypes: 8,
-          categories: 3,
+          totalItems: 35,
+          totalTypes: 2,
+          categories: 2,
         },
       },
     },
@@ -81,12 +110,14 @@ export class InventoryController {
 
   @Get("summary")
   @ApiOperation({
-    summary: "Get inventory summary",
-    description: "Quick overview of inventory totals by category",
+    summary: "📊 Get inventory summary",
+    description:
+      "Quick overview of inventory totals by category.\n\n" +
+      "Perfect for dashboard displays or quick checks before operations.",
   })
   @ApiResponse({
     status: 200,
-    description: "Returns inventory summary",
+    description: "Returns inventory summary with totals by category",
     schema: {
       example: {
         seeds: 20,

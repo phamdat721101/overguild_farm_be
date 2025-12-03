@@ -1,9 +1,12 @@
-import { Injectable, ConflictException, NotFoundException, UnauthorizedException } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { PrismaClient } from '@prisma/client';
-import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from './dto/register.dto';
-import { ethers } from 'ethers';
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+} from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
+import { PrismaClient } from "@prisma/client";
+import { LoginDto } from "./dto/login.dto";
+import { RegisterDto } from "./dto/register.dto";
 
 @Injectable()
 export class AuthService {
@@ -11,11 +14,11 @@ export class AuthService {
 
   constructor(
     private readonly jwtService: JwtService,
-    private readonly prisma: PrismaClient,
+    private readonly prisma: PrismaClient
   ) {}
 
   async register(dto: RegisterDto) {
-    const { walletAddress } = dto;
+    const { walletAddress, username } = dto;
     const wallet = walletAddress.toLowerCase();
 
     // Kiểm tra user đã tồn tại chưa
@@ -24,19 +27,28 @@ export class AuthService {
     });
 
     if (existingUser) {
-      throw new ConflictException('User with this wallet address already exists');
+      throw new ConflictException(
+        "User with this wallet address already exists"
+      );
+    }
+
+    // Kiểm tra username đã tồn tại chưa (nếu có)
+    if (username) {
+      const existingUsername = await this.prisma.user.findFirst({
+        where: { username },
+      });
+
+      if (existingUsername) {
+        throw new ConflictException("Username already taken");
+      }
     }
 
     // Tạo user mới với 1 Land + 1 Plant starter
     const user = await this.prisma.user.create({
       data: {
         walletAddress: wallet,
-        // Network chỉ là label hiển thị; multi-chain thực sự sẽ được
-        // handle riêng sau (nhiều địa chỉ / chain).
-        network: 'multi-chain',
-        // Các thông tin khác (username, avatar, social links, ...) 
-        // sẽ được cập nhật sau qua API update profile / multi-chain setup
-        username: null,
+        network: "multi-chain",
+        username: username || null,
         avatar: null,
         // Tạo 1 mảnh đất (plot 0) với 1 cây starter (SEED)
         lands: {
@@ -45,8 +57,8 @@ export class AuthService {
             soilQuality: { fertility: 50, hydration: 50 },
             plant: {
               create: {
-                type: 'SOCIAL',
-                stage: 'SEED',
+                type: "SOCIAL",
+                stage: "SEED",
                 lastInteractedAt: new Date(),
                 plantedAt: new Date(),
                 interactions: 0,
@@ -80,7 +92,7 @@ export class AuthService {
         xp: user.xp,
         reputationScore: user.reputationScore,
         landsCount: user.lands.length,
-        plantsCount: user.lands.filter(l => l.plant !== null).length,
+        plantsCount: user.lands.filter((l) => l.plant !== null).length,
       },
     };
   }
@@ -102,7 +114,7 @@ async login(dto: LoginDto) {
     });
 
     if (!user) {
-      throw new NotFoundException('User not found. Please register first.');
+      throw new NotFoundException("User not found. Please register first.");
     }
 
     // Login chỉ dựa trên walletAddress,
@@ -121,7 +133,7 @@ async login(dto: LoginDto) {
         xp: user.xp,
         reputationScore: user.reputationScore,
         landsCount: user.lands.length,
-        plantsCount: user.lands.filter(l => l.plant !== null).length,
+        plantsCount: user.lands.filter((l) => l.plant !== null).length,
       },
     };
   }

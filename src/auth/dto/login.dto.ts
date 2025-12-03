@@ -9,3 +9,4 @@ export class LoginDto {
   @IsEthereumAddress()
   walletAddress: string;
 }
+

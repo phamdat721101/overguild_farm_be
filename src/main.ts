@@ -6,6 +6,7 @@ import { AppModule } from "./app.module";
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Validation
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -14,12 +15,14 @@ async function bootstrap() {
     })
   );
 
+  // CORS
   app.enableCors();
 
+  // Swagger Documentation
   const config = new DocumentBuilder()
     .setTitle("OverGuild API")
-    .setDescription("GameFi Backend for OverGuild - Social Farming & Missions")
-    .setVersion("1.0")
+    .setDescription("GameFi Backend - Social Farming & Missions")
+    .setVersion("1.0.0")
     .addBearerAuth(
       {
         type: "http",
@@ -31,14 +34,21 @@ async function bootstrap() {
       },
       "JWT-auth"
     )
-    .addTag("Auth", "Wallet authentication & login")
-    .addTag("User", "User profile management")
-    .addTag("Inventory", "Inventory management - view, add, remove, transfer items")
-    .addTag("Land", "Land/Garden management (deprecated)")
+    .addTag("Auth", "Authentication")
+    .addTag("User", "User management")
+    .addTag("Inventory", "Inventory management")
+    .addTag("Plant", "Plant lifecycle")
+    .addTag("Seed", "Seed operations")
+    .addTag("Fertilizer", "Fertilizer & composting")
+    .addTag("Events", "Event check-in")
+    .addTag("Missions", "Missions & rewards")
+    .addTag("Soulbound Tokens", "Achievement badges")
+    .addTag("Progression", "User progression")
+    .addTag("Land", "Land management")
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-
+  
   // Use custom Swagger options for Vercel compatibility
   SwaggerModule.setup("api", app, document, {
     customSiteTitle: "OverGuild API Docs",
