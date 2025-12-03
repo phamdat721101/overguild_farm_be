@@ -6,7 +6,6 @@ import { AppModule } from "./app.module";
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Validation
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -15,10 +14,8 @@ async function bootstrap() {
     })
   );
 
-  // CORS
   app.enableCors();
 
-  // Swagger Documentation
   const config = new DocumentBuilder()
     .setTitle("OverGuild API")
     .setDescription("GameFi Backend for OverGuild - Social Farming & Missions")
@@ -36,15 +33,30 @@ async function bootstrap() {
     )
     .addTag("Auth", "Wallet authentication & login")
     .addTag("User", "User profile management")
-    .addTag(
-      "Inventory",
-      "Inventory management - view, add, remove, transfer items"
-    )
+    .addTag("Inventory", "Inventory management - view, add, remove, transfer items")
     .addTag("Land", "Land/Garden management (deprecated)")
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup("api", app, document);
+
+  // Use custom Swagger options for Vercel compatibility
+  SwaggerModule.setup("api", app, document, {
+    customSiteTitle: "OverGuild API Docs",
+    customfavIcon: "https://nestjs.com/img/logo-small.svg",
+    customCss: ".swagger-ui .topbar { display: none }",
+    swaggerOptions: {
+      persistAuthorization: true,
+      displayRequestDuration: true,
+    },
+    // Force use of CDN assets instead of local files
+    customCssUrl: [
+      "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css",
+    ],
+    customJs: [
+      "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js",
+      "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-standalone-preset.js",
+    ],
+  });
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
