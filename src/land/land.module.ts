@@ -1,12 +1,14 @@
 import { Module } from '@nestjs/common';
+import { PrismaClient } from '@prisma/client';
 import { LandController } from './land.controller';
 import { LandService } from './land.service';
-import { SupabaseModule } from '../supabase/supabase.module';
 
 @Module({
-  imports: [SupabaseModule],
   controllers: [LandController],
-  providers: [LandService],
+  providers: [
+    LandService,
+    { provide: PrismaClient, useValue: new PrismaClient() },
+  ],
   exports: [LandService],
 })
 export class LandModule {}

@@ -35,8 +35,6 @@ export class UserService {
             inventoryItems: true,
             missionLogs: true,
             soulboundTokens: true,
-            seeds: true,
-            inventory: true,
           },
         },
       },

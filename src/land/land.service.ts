@@ -1,117 +1,169 @@
-import {
-  BadRequestException,
-  Injectable,
-  InternalServerErrorException,
-  Logger,
-} from '@nestjs/common';
-import { SupabaseService } from '../supabase/supabase.service';
-import { LandGrowthStage } from './enums/growth-stage.enum';
-import { LandEntity } from './interfaces/land.interface';
+import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
+import { PrismaClient } from '@prisma/client';
 import { AssignSeedDto } from './dto/assign-seed.dto';
-
-// Tạm dùng kiểu rộng để tránh lỗi TS với Supabase generated types
-type LandInsert = Record<string, unknown>;
-type LandUpdate = Record<string, unknown>;
 
 @Injectable()
 export class LandService {
   private readonly logger = new Logger(LandService.name);
-  private readonly landsTable = 'lands';
 
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(private readonly prisma: PrismaClient) {}
 
-  async getLand(walletAddress: string): Promise<LandEntity> {
-    const wallet = this.normalizeWallet(walletAddress);
-    const client = this.supabaseService.getClient() as any;
+  /**
+   * Get user's land by wallet address
+   * Creates default land if it doesn't exist
+   */
+  async getLand(walletAddress: string) {
+    const wallet = walletAddress.toLowerCase();
 
-    const response = await client
-      .from(this.landsTable as any)
-      .select('*')
-      .eq('wallet_address', wallet)
-      .maybeSingle();
+    // Find user by wallet
+    const user = await this.prisma.user.findUnique({
+      where: { walletAddress: wallet },
+      include: {
+        lands: {
+          include: { plant: true },
+          orderBy: { plotIndex: 'asc' },
+        },
+      },
+    });
 
-    if (response.error) {
-      this.logger.error('Failed to fetch land', response.error);
-      throw new InternalServerErrorException('Unable to fetch land');
+    if (!user) {
+      throw new NotFoundException('User not found. Please register first.');
     }
 
-    if (response.data) {
-      return response.data as LandEntity;
+    // Return first land (plot 0) for backward compatibility
+    const land = user.lands[0];
+    
+    if (!land) {
+      throw new NotFoundException('No land found for this user');
     }
 
-    return this.createDefaultLand(wallet);
-  }
-
-  async assignSeed(dto: AssignSeedDto): Promise<LandEntity> {
-    const wallet = this.normalizeWallet(dto.walletAddress);
-    const land = await this.getLand(wallet);
-
-    if (
-      land.growth_stage !== LandGrowthStage.EMPTY &&
-      land.growth_stage !== LandGrowthStage.HARVESTED
-    ) {
-      throw new BadRequestException(
-        `Land must be empty or harvested before assigning a new seed`,
-      );
-    }
-
-    const now = new Date().toISOString();
-    const payload: LandUpdate = {
-      seed_type: dto.seedType,
-      growth_stage: LandGrowthStage.SEEDED,
-      planted_at: now,
-      last_progress_at: now,
-      task_status: land.task_status ?? {},
+    // Transform to legacy format for backward compatibility
+    return {
+      id: land.id,
+      wallet_address: user.walletAddress,
+      plot_index: land.plotIndex,
+      soil_quality: land.soilQuality,
+      seed_type: land.plant?.type || null,
+      growth_stage: this.mapPlantStageToGrowthStage(land.plant?.stage),
+      growth_points: land.plant?.interactions || 0,
+      task_status: {},
+      planted_at: land.plant?.plantedAt?.toISOString() || null,
+      last_progress_at: land.plant?.lastInteractedAt?.toISOString() || null,
+      ready_at: land.plant?.isHarvestable ? new Date().toISOString() : null,
+      bounty_claimed_at: null,
+      metadata: {},
+      created_at: land.createdAt.toISOString(),
+      updated_at: land.updatedAt.toISOString(),
     };
-
-    const client = this.supabaseService.getClient() as any;
-    const response = await client
-      .from(this.landsTable as any)
-      .update(payload as any)
-      .eq('wallet_address', wallet)
-      .select('*')
-      .single();
-
-    if (response.error) {
-      this.logger.error('Failed to assign seed', response.error);
-      throw new InternalServerErrorException('Unable to assign seed');
-    }
-
-    return response.data as LandEntity;
   }
 
-  private async createDefaultLand(wallet: string): Promise<LandEntity> {
-    const client = this.supabaseService.getClient() as any;
-    const defaultLand: LandInsert = {
-      wallet_address: wallet,
-      plot_index: 0,
-      soil_quality: { fertility: 50, hydration: 50 },
-      seed_type: null,
-      growth_stage: LandGrowthStage.EMPTY,
+  /**
+   * Assign seed to land (legacy endpoint - prefer using POST /plant/plant instead)
+   */
+  async assignSeed(dto: AssignSeedDto) {
+    const wallet = dto.walletAddress.toLowerCase();
+
+    // Find user and their first land
+    const user = await this.prisma.user.findUnique({
+      where: { walletAddress: wallet },
+      include: {
+        lands: {
+          include: { plant: true },
+          orderBy: { plotIndex: 'asc' },
+          take: 1,
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const land = user.lands[0];
+    if (!land) {
+      throw new NotFoundException('No land found for this user');
+    }
+
+    if (land.plant) {
+      throw new BadRequestException('Land already has a plant. Harvest it first!');
+    }
+
+    // Create plant using the new system
+    const now = new Date();
+    const plant = await this.prisma.plant.create({
+      data: {
+        landId: land.id,
+        type: dto.seedType,
+        stage: 'DIGGING',
+        plantedAt: now,
+        lastInteractedAt: now,
+        diggingStartedAt: now,
+        diggingDuration: this.getDiggingDuration(dto.seedType),
+        growingDuration: this.getGrowingDuration(dto.seedType),
+        diggingCompleted: false,
+        interactions: 0,
+        waterCount: 0,
+        githubCommits: 0,
+        isGoldBranch: false,
+      },
+    });
+
+    // Return in legacy format
+    return {
+      id: land.id,
+      wallet_address: user.walletAddress,
+      plot_index: land.plotIndex,
+      soil_quality: land.soilQuality,
+      seed_type: plant.type,
+      growth_stage: 'seeded',
       growth_points: 0,
       task_status: {},
-      planted_at: null,
-      last_progress_at: null,
+      planted_at: plant.plantedAt.toISOString(),
+      last_progress_at: plant.lastInteractedAt.toISOString(),
       ready_at: null,
       bounty_claimed_at: null,
       metadata: {},
+      created_at: land.createdAt.toISOString(),
+      updated_at: land.updatedAt.toISOString(),
     };
-
-    const response = await client
-      .from(this.landsTable as any)
-      .insert(defaultLand as any)
-      .select('*')
-      .single();
-
-    if (response.error) {
-      this.logger.error('Failed to create default land', response.error);
-      throw new InternalServerErrorException('Unable to create land');
-    }
-
-    return response.data as LandEntity;
   }
 
-  private normalizeWallet(wallet: string): string {
-    return wallet?.trim().toLowerCase();
+  private mapPlantStageToGrowthStage(stage?: string): string {
+    if (!stage) return 'empty';
+    
+    const stageMap: Record<string, string> = {
+      'DIGGING': 'seeded',
+      'GROWING': 'sprout',
+      'MATURE': 'fruit',
+      'HARVESTED': 'harvested',
+    };
+    
+    return stageMap[stage] || 'empty';
+  }
+
+  private getDiggingDuration(seedType: string): number {
+    const durations: Record<string, number> = {
+      'ALGAE': 1,
+      'MUSHROOM': 10,
+      'TREE': 72,
+      'SOCIAL': 1,
+      'TECH': 1,
+      'CREATIVE': 1,
+      'BUSINESS': 1,
+    };
+    return durations[seedType] || 1;
+  }
+
+  private getGrowingDuration(seedType: string): number {
+    const durations: Record<string, number> = {
+      'ALGAE': 12,
+      'MUSHROOM': 72,
+      'TREE': 720,
+      'SOCIAL': 12,
+      'TECH': 12,
+      'CREATIVE': 12,
+      'BUSINESS': 12,
+    };
+    return durations[seedType] || 12;
   }
 }

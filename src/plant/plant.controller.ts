@@ -78,6 +78,10 @@ export class PlantController {
 
   @Patch('plant/:id/interact')
   @ApiOperation({ summary: 'Interact with plant (visit/social) - Legacy endpoint' })
+  @ApiResponse({
+    status: 200,
+    description: 'Plant interaction successful',
+  })
   interact(
     @Param('id') plantId: string,
     @CurrentUser('sub') userId: string,

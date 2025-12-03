@@ -1,7 +1,8 @@
 import { Injectable, Logger, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { CheckInDto } from './dto/check-in.dto';
-import { FundxApiClient, FundxEvent } from './fundx-api.client';
+import { CreateEventDto } from './dto/create-event.dto';
+import { FundxEvent } from './fundx-api.client';
 import { MissionService } from '../mission/mission.service';
 
 @Injectable()
@@ -10,13 +11,13 @@ export class EventService {
 
   constructor(
     private readonly prisma: PrismaClient,
-    private readonly fundxApi: FundxApiClient,
+    // Giữ FundxApiClient cho tương lai nếu cần sync với FundX, hiện tại không dùng
     @Inject(forwardRef(() => MissionService))
     private readonly missionService: MissionService,
   ) {}
 
   /**
-   * Check if event is currently active
+   * Check if external FundX event is currently active (legacy helper)
    */
   private isEventActive(event: FundxEvent): boolean {
     const now = new Date();
@@ -25,31 +26,49 @@ export class EventService {
     return now >= startTime && now <= endTime;
   }
 
+  async createEvent(creatorWallet: string, dto: CreateEventDto) {
+    // Lưu event vào bảng local `events`
+    const event = await this.prisma.event.create({
+      data: {
+        name: dto.name,
+        description: dto.description ?? null,
+        location: dto.location,
+        startTime: new Date(dto.startTime),
+        endTime: new Date(dto.endTime),
+      },
+    });
+
+    this.logger.log(
+      `Created local event "${event.name}" (${event.id}) by wallet ${creatorWallet.toLowerCase()}`,
+    );
+
+    return {
+      id: event.id,
+      name: event.name,
+      description: event.description,
+      location: event.location,
+      startTime: event.startTime,
+      endTime: event.endTime,
+    };
+  }
+
   async checkIn(userId: string, dto: CheckInDto) {
     const { eventId, verificationCode } = dto;
 
-    // Fetch event from FundX
-    const event = await this.fundxApi.getEventById(eventId);
-    
+    // Fetch event from local DB
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+    });
+
     if (!event) {
       throw new NotFoundException(`Event ${eventId} not found`);
     }
 
-    // Verify event is active (allow check-in before start_time for pending events)
+    // Verify event is active by time window
     const now = new Date();
-    const endTime = new Date(event.end_time);
-    
-    if (now > endTime) {
+    if (now > event.endTime) {
       throw new BadRequestException(
-        `Event "${event.name}" has ended. ` +
-        `Event ended at: ${event.end_time}`
-      );
-    }
-
-    // Verify event status
-    if (event.status !== 'active' && event.status !== 'pending') {
-      throw new BadRequestException(
-        `Event "${event.name}" is ${event.status} and cannot accept check-ins`
+        `Event "${event.name}" has ended. Event ended at: ${event.endTime.toISOString()}`,
       );
     }
 
@@ -120,8 +139,8 @@ export class EventService {
         id: event.id,
         name: event.name,
         location: event.location,
-        startTime: event.start_time,
-        endTime: event.end_time,
+        startTime: event.startTime,
+        endTime: event.endTime,
       },
       reward: {
         itemType: 'SEED_COMMON',
@@ -132,24 +151,44 @@ export class EventService {
   }
 
   async getActiveEvents() {
-    const events = await this.fundxApi.getActiveEvents();
-    
-    // Filter to only show events that haven't ended yet (include future events)
     const now = new Date();
-    const upcomingEvents = events.filter(event => {
-      const endTime = new Date(event.end_time);
-      return now <= endTime; // Show events that haven't ended
+    const events = await this.prisma.event.findMany({
+      where: {
+        endTime: {
+          gte: now,
+        },
+      },
+      orderBy: {
+        startTime: 'asc',
+      },
     });
 
-    return upcomingEvents.map(event => ({
+    return events.map((event) => ({
       id: event.id,
       name: event.name,
       description: event.description,
       location: event.location,
-      startTime: event.start_time,
-      endTime: event.end_time,
-      status: event.status,
-      coverImage: event.gallery_images?.find(img => img.is_cover)?.image_url,
+      startTime: event.startTime,
+      endTime: event.endTime,
     }));
+  }
+
+  async getEventById(eventId: string) {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+    });
+
+    if (!event) {
+      throw new NotFoundException(`Event ${eventId} not found`);
+    }
+
+    return {
+      id: event.id,
+      name: event.name,
+      description: event.description,
+      location: event.location,
+      startTime: event.startTime,
+      endTime: event.endTime,
+    };
   }
 }

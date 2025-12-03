@@ -23,4 +23,10 @@ export class SeedController {
   addSeed(@CurrentUser() user: any, @Body() dto: AddSeedDto) {
     return this.seedService.addSeed(user.sub, dto.type, dto.rarity);
   }
+
+  @Post('craft/mushroom')
+  @ApiOperation({ summary: 'Craft MUSHROOM seed from 5 ALGAE fruits' })
+  craftMushroom(@CurrentUser('sub') userId: string) {
+    return this.seedService.craftMushroom(userId);
+  }
 }

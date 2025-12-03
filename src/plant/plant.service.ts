@@ -1,34 +1,98 @@
-import { Injectable, BadRequestException, NotFoundException, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaClient } from '@prisma/client';
 import { SeedService } from '../seed/seed.service';
-import { MissionService } from '../mission/mission.service';
 
 @Injectable()
 export class PlantService {
   private readonly logger = new Logger(PlantService.name);
 
-  // Growth thresholds (interactions needed)
-  private readonly STAGE_THRESHOLDS = {
-    SEED: 0,
-    SPROUT: 3,    // 3 waters to sprout
-    BLOOM: 8,     // 8 total waters to bloom
-    FRUIT: 15,    // 15 total waters to fruit
-  };
+  // Plant type configurations based on the image + legacy types
+  private readonly PLANT_CONFIGS = {
+    // New growth cycle plants (from image)
+    ALGAE: {
+      name: 'Tảo',
+      source: 'Shop/Starter',
+      bucketRequired: 1,
+      diggingHours: 1,
+      growingHours: 12,
+      totalHours: 13,
+      baseYield: 3,
+    },
+    MUSHROOM: {
+      name: 'Nấm',
+      source: 'Craft (5 Tảo)',
+      bucketRequired: 1,
+      diggingHours: 10,
+      growingHours: 72,
+      totalHours: 82,
+      baseYield: 5,
+      craftCost: { ALGAE: 5 },
+    },
+    TREE: {
+      name: 'Cây',
+      source: 'NFT Seed',
+      bucketRequired: 1,
+      diggingHours: 72, // 3 days
+      growingHours: 720, // 30 days
+      totalHours: 792, // ~33 days
+      baseYield: 10,
+    },
 
-  private readonly WILT_HOURS = 72;
-  private readonly WATER_COOLDOWN_HOURS = 0; // Disabled for MVP testing (set to 1 for production)
+    // Legacy plant types (for backward compatibility with existing data)
+    SOCIAL: {
+      name: 'Social Plant',
+      source: 'Starter',
+      bucketRequired: 1,
+      diggingHours: 1,
+      growingHours: 12,
+      totalHours: 13,
+      baseYield: 3,
+    },
+    TECH: {
+      name: 'Tech Plant',
+      source: 'Starter',
+      bucketRequired: 1,
+      diggingHours: 1,
+      growingHours: 12,
+      totalHours: 13,
+      baseYield: 3,
+    },
+    CREATIVE: {
+      name: 'Creative Plant',
+      source: 'Starter',
+      bucketRequired: 1,
+      diggingHours: 1,
+      growingHours: 12,
+      totalHours: 13,
+      baseYield: 3,
+    },
+    BUSINESS: {
+      name: 'Business Plant',
+      source: 'Starter',
+      bucketRequired: 1,
+      diggingHours: 1,
+      growingHours: 12,
+      totalHours: 13,
+      baseYield: 3,
+    },
+  };
 
   constructor(
     private readonly prisma: PrismaClient,
     private readonly seedService: SeedService,
-    @Inject(forwardRef(() => MissionService))
-    private readonly missionService: MissionService,
   ) {}
 
   /**
-   * Plant a seed on a land plot
+   * Plant a seed - starts DIGGING phase
    */
   async plantSeed(userId: string, landId: string, seedType: string) {
+    // Validate plant type
+    const config = this.PLANT_CONFIGS[seedType];
+    if (!config) {
+      throw new BadRequestException(`Invalid seed type. Must be: ALGAE, MUSHROOM, or TREE`);
+    }
+
     // Validate land ownership
     const land = await this.prisma.land.findFirst({
       where: { id: landId, userId },
@@ -43,43 +107,60 @@ export class PlantService {
       throw new BadRequestException('This land already has a plant. Harvest it first!');
     }
 
-    // Consume seed from inventory (will throw if not enough)
+    // Check bucket in inventory
+    const bucket = await this.prisma.inventoryItem.findUnique({
+      where: {
+        userId_itemType: { userId, itemType: 'BUCKET' },
+      },
+    });
+
+    if (!bucket || bucket.amount < config.bucketRequired) {
+      throw new BadRequestException(`You need ${config.bucketRequired} bucket(s) to plant ${config.name}`);
+    }
+
+    // Consume bucket
+    await this.prisma.inventoryItem.update({
+      where: { id: bucket.id },
+      data: { amount: { decrement: config.bucketRequired } },
+    });
+
+    // Consume seed
     await this.seedService.consumeSeed(userId, seedType);
 
-    // Create plant
+    // Create plant in DIGGING phase
+    const now = new Date();
     const plant = await this.prisma.plant.create({
       data: {
         landId,
         type: seedType,
-        stage: 'SEED',
-        plantedAt: new Date(),
-        lastInteractedAt: new Date(),
+        stage: 'DIGGING',
+        plantedAt: now,
+        lastInteractedAt: now,
+        diggingStartedAt: now,
+        diggingDuration: config.diggingHours,
+        growingDuration: config.growingHours,
+        diggingCompleted: false,
         interactions: 0,
-        githubCommits: 0,
-        isGoldBranch: false,
+        waterCount: 0,
       },
-      include: {
-        land: true,
-      },
+      include: { land: true },
     });
 
-    this.logger.log(`User ${userId} planted ${seedType} on land ${landId}`);
+    this.logger.log(`User ${userId} planted ${seedType} on land ${landId}. Digging for ${config.diggingHours}h.`);
 
     return {
       plant,
-      message: `Successfully planted ${seedType} seed!`,
-      nextStage: 'SPROUT',
-      interactionsNeeded: this.STAGE_THRESHOLDS.SPROUT,
+      message: `🌱 Successfully planted ${config.name}! Digging phase: ${config.diggingHours} hours`,
+      phase: 'DIGGING',
+      diggingTime: `${config.diggingHours}h`,
+      growingTime: `${config.growingHours}h`,
+      totalTime: `${config.totalHours}h`,
+      note: '⚠️ Digging time cannot be shortened by potions',
     };
   }
 
   /**
-   * Water a plant (social feature)
-   * - Updates lastInteractedAt for plant owner
-   * - Increments interactions count
-   * - Checks for growth stage upgrade
-   * - Tracks mission progress
-   * - Rate limit: 1 water per hour per plant
+   * Water a plant (only works in GROWING phase)
    */
   async waterPlant(plantId: string, watererId: string) {
     const plant = await this.prisma.plant.findUnique({
@@ -91,128 +172,47 @@ export class PlantService {
       throw new NotFoundException('Plant not found');
     }
 
-    if (plant.stage === 'DEAD') {
-      throw new BadRequestException('This plant has wilted. It cannot be revived.');
-    }
-
-    if (plant.stage === 'FRUIT') {
-      throw new BadRequestException('This plant is ready to harvest! Water it after harvesting.');
-    }
-
-    // Check rate limit: Can't water same plant within 1 hour
-    const oneHourAgo = new Date(Date.now() - this.WATER_COOLDOWN_HOURS * 60 * 60 * 1000);
-    if (plant.lastInteractedAt > oneHourAgo) {
-      const nextWaterTime = new Date(plant.lastInteractedAt.getTime() + this.WATER_COOLDOWN_HOURS * 60 * 60 * 1000);
+    // Can only water during GROWING phase
+    if (plant.stage !== 'GROWING') {
       throw new BadRequestException(
-        `This plant was recently watered. Try again after ${nextWaterTime.toISOString()}`
+        `Cannot water plant in ${plant.stage} phase. Wait until digging completes.`
       );
     }
 
-    // Update plant
-    const newInteractions = plant.interactions + 1;
-    const oldStage = plant.stage;
-    const newStage = this.calculateStage(newInteractions);
+    // Check if already watered by this user today
+    if (plant.wateredBy.includes(watererId)) {
+      throw new BadRequestException('You already watered this plant today');
+    }
 
+    // Update plant
     const updatedPlant = await this.prisma.plant.update({
       where: { id: plantId },
       data: {
-        interactions: newInteractions,
+        waterCount: { increment: 1 },
+        interactions: { increment: 1 },
+        lastWateredAt: new Date(),
+        wateredBy: { push: watererId },
         lastInteractedAt: new Date(),
-        stage: newStage,
-      },
-      include: {
-        land: true,
       },
     });
 
-    // Track mission progress for waterer
-    try {
-      await this.missionService.trackPlantWater(watererId);
-    } catch (error) {
-      this.logger.error(`Failed to track water mission: ${error.message}`);
-    }
+    // Check if ready to harvest
+    await this.checkGrowthCompletion(updatedPlant);
 
-    const stageChanged = oldStage !== newStage;
-    const nextStageInfo = this.getNextStageInfo(newStage, newInteractions);
-
-    this.logger.log(
-      `User ${watererId} watered plant ${plantId} (${oldStage} → ${newStage}, ${newInteractions} interactions)`
-    );
+    this.logger.log(`User ${watererId} watered plant ${plantId}`);
 
     return {
       plant: updatedPlant,
-      stageChanged,
-      oldStage,
-      newStage,
-      interactions: newInteractions,
-      ...nextStageInfo,
-      message: stageChanged 
-        ? `🎉 Plant grew to ${newStage} stage!` 
-        : `Plant watered! ${nextStageInfo.interactionsNeeded} more waters to ${nextStageInfo.nextStage}`,
+      message: '💧 Plant watered successfully!',
+      waterCount: updatedPlant.waterCount,
     };
   }
 
   /**
-   * Calculate plant stage based on interactions
+   * Interact with plant (visit/social action)
+   * Legacy method for backward compatibility
    */
-  private calculateStage(interactions: number): string {
-    if (interactions >= this.STAGE_THRESHOLDS.FRUIT) return 'FRUIT';
-    if (interactions >= this.STAGE_THRESHOLDS.BLOOM) return 'BLOOM';
-    if (interactions >= this.STAGE_THRESHOLDS.SPROUT) return 'SPROUT';
-    return 'SEED';
-  }
-
-  /**
-   * Get next stage info for UI
-   */
-  private getNextStageInfo(currentStage: string, interactions: number) {
-    const stages = ['SEED', 'SPROUT', 'BLOOM', 'FRUIT'];
-    const currentIndex = stages.indexOf(currentStage);
-    
-    if (currentIndex === stages.length - 1) {
-      return {
-        nextStage: 'HARVEST',
-        interactionsNeeded: 0,
-        progress: 100,
-      };
-    }
-
-    const nextStage = stages[currentIndex + 1];
-    const nextThreshold = this.STAGE_THRESHOLDS[nextStage];
-    const interactionsNeeded = nextThreshold - interactions;
-    const progress = Math.floor((interactions / nextThreshold) * 100);
-
-    return {
-      nextStage,
-      interactionsNeeded,
-      progress,
-    };
-  }
-
   async interactPlant(plantId: string, userId: string, action: 'visit' | 'social') {
-    const plant = await this.prisma.plant.findUnique({
-      where: { id: plantId },
-      include: { land: true },
-    });
-
-    if (!plant || plant.land.userId !== userId) {
-      throw new NotFoundException('Plant not found');
-    }
-
-    // Simple interaction for MVP
-    return this.prisma.plant.update({
-      where: { id: plantId },
-      data: {
-        interactions: { increment: 1 },
-        lastInteractedAt: new Date(),
-      },
-    });
-  }
-
-  /**
-   * Harvest a plant that reached FRUIT stage
-   */
-  async harvestPlant(plantId: string, userId: string) {
     const plant = await this.prisma.plant.findUnique({
       where: { id: plantId },
       include: { land: true },
@@ -223,28 +223,110 @@ export class PlantService {
     }
 
     if (plant.land.userId !== userId) {
-      throw new BadRequestException('You can only harvest your own plants');
+      throw new BadRequestException('You can only interact with your own plants');
     }
 
-    if (plant.stage !== 'FRUIT') {
-      throw new BadRequestException(
-        `Plant is not ready to harvest. Current stage: ${plant.stage}. Needs ${this.STAGE_THRESHOLDS.FRUIT - plant.interactions} more waters.`
+    if (plant.stage !== 'GROWING' && plant.stage !== 'MATURE') {
+      throw new BadRequestException(`Cannot interact with plant in ${plant.stage} stage`);
+    }
+
+    const growthBoost = action === 'visit' ? 1 : 2;
+
+    const updatedPlant = await this.prisma.plant.update({
+      where: { id: plantId },
+      data: {
+        interactions: { increment: 1 },
+        lastInteractedAt: new Date(),
+      },
+    });
+
+    await this.checkGrowthCompletion(updatedPlant);
+
+    return {
+      plant: updatedPlant,
+      message: action === 'visit' 
+        ? '👀 Visited plant! +1 interaction' 
+        : '🤝 Social interaction! +2 interactions',
+      growthBoost,
+    };
+  }
+
+  /**
+   * Check if plant completed digging or growing phase
+   */
+  private async checkGrowthCompletion(plant: any) {
+    const now = new Date();
+
+    // Check digging completion
+    if (plant.stage === 'DIGGING' && plant.diggingStartedAt) {
+      const diggingEndTime = new Date(
+        plant.diggingStartedAt.getTime() + plant.diggingDuration * 60 * 60 * 1000
       );
+
+      if (now >= diggingEndTime) {
+        await this.prisma.plant.update({
+          where: { id: plant.id },
+          data: {
+            stage: 'GROWING',
+            diggingCompleted: true,
+            growingStartedAt: now,
+          },
+        });
+
+        this.logger.log(`Plant ${plant.id} completed digging, now GROWING`);
+      }
     }
 
-    // Calculate fruit yield (base 3 + bonus for interactions)
-    const baseYield = 3;
-    const bonusYield = Math.floor(plant.interactions / 5); // +1 fruit per 5 interactions
+    // Check growing completion
+    if (plant.stage === 'GROWING' && plant.growingStartedAt) {
+      const growingEndTime = new Date(
+        plant.growingStartedAt.getTime() + plant.growingDuration * 60 * 60 * 1000
+      );
+
+      if (now >= growingEndTime) {
+        await this.prisma.plant.update({
+          where: { id: plant.id },
+          data: {
+            stage: 'MATURE',
+            isHarvestable: true,
+          },
+        });
+
+        this.logger.log(`Plant ${plant.id} is now MATURE and harvestable`);
+      }
+    }
+  }
+
+  /**
+   * Harvest mature plant
+   */
+  async harvestPlant(plantId: string, userId: string) {
+    const plant = await this.prisma.plant.findUnique({
+      where: { id: plantId },
+      include: { land: true },
+    });
+
+    if (!plant || plant.land.userId !== userId) {
+      throw new NotFoundException('Plant not found');
+    }
+
+    if (plant.stage !== 'MATURE') {
+      throw new BadRequestException(`Plant is not ready. Current stage: ${plant.stage}`);
+    }
+
+    const config = this.PLANT_CONFIGS[plant.type];
+    const baseYield = config.baseYield;
+    const bonusYield = Math.floor(plant.waterCount * 0.5); // +0.5 per water
     const totalYield = baseYield + bonusYield;
 
     // Add fruits to inventory
     await this.prisma.inventoryItem.upsert({
       where: {
-        userId_itemType: { userId, itemType: 'FRUIT' },
+        userId_itemType: { userId, itemType: `FRUIT_${plant.type}` },
       },
       create: {
         userId,
-        itemType: 'FRUIT',
+        itemType: `FRUIT_${plant.type}`,
         amount: totalYield,
       },
       update: {
@@ -252,42 +334,33 @@ export class PlantService {
       },
     });
 
-    // Delete plant (clear the land)
+    // Delete plant
     await this.prisma.plant.delete({
       where: { id: plantId },
     });
 
-    // Track mission progress
-    try {
-      await this.missionService.trackFruitHarvest(userId);
-    } catch (error) {
-      this.logger.error(`Failed to track harvest mission: ${error.message}`);
-    }
-
-    this.logger.log(`User ${userId} harvested plant ${plantId}, received ${totalYield} fruits`);
+    this.logger.log(`User ${userId} harvested ${totalYield} ${plant.type} fruits`);
 
     return {
       success: true,
       harvest: {
+        plantType: plant.type,
         fruitYield: totalYield,
         baseYield,
         bonusYield,
-        plantType: plant.type,
-        interactions: plant.interactions,
+        waterCount: plant.waterCount,
       },
-      message: `🎉 Harvested ${totalYield} fruits! Land is now empty and ready for a new seed.`,
+      message: `🎉 Harvested ${totalYield} ${config.name} fruits!`,
     };
   }
 
   /**
-   * Get user's garden (all plants with growth info)
+   * Get garden with growth progress
    */
   async getGarden(userId: string) {
     const lands = await this.prisma.land.findMany({
       where: { userId },
-      include: {
-        plant: true,
-      },
+      include: { plant: true },
       orderBy: { plotIndex: 'asc' },
     });
 
@@ -298,77 +371,103 @@ export class PlantService {
         return {
           landId: land.id,
           plotIndex: land.plotIndex,
-          soilQuality: land.soilQuality,
           plant: null,
           status: 'EMPTY',
-          message: 'This land is ready for planting!',
         };
       }
 
       const plant = land.plant;
-      const nextStageInfo = this.getNextStageInfo(plant.stage, plant.interactions);
       
-      // Calculate time to wilt
-      const wiltTime = new Date(plant.lastInteractedAt.getTime() + this.WILT_HOURS * 60 * 60 * 1000);
-      const hoursToWilt = Math.max(0, (wiltTime.getTime() - now.getTime()) / (1000 * 60 * 60));
-      const isWilting = hoursToWilt < 24; // Warning if less than 24h
+      // Safely get config with fallback
+      const config = this.PLANT_CONFIGS[plant.type] || {
+        name: plant.type,
+        source: 'Unknown',
+        bucketRequired: 1,
+        diggingHours: 1,
+        growingHours: 12,
+        totalHours: 13,
+        baseYield: 3,
+      };
 
-      // Calculate next water time
-      const nextWaterTime = new Date(plant.lastInteractedAt.getTime() + this.WATER_COOLDOWN_HOURS * 60 * 60 * 1000);
-      const canWaterNow = now >= nextWaterTime;
+      let progress = 0;
+      let timeRemaining = '';
+      let canWater = false;
+
+      if (plant.stage === 'DIGGING' && plant.diggingStartedAt) {
+        const endTime = new Date(
+          plant.diggingStartedAt.getTime() + plant.diggingDuration * 60 * 60 * 1000
+        );
+        const elapsed = now.getTime() - plant.diggingStartedAt.getTime();
+        const total = plant.diggingDuration * 60 * 60 * 1000;
+        progress = Math.min(100, Math.floor((elapsed / total) * 100));
+        
+        const remaining = Math.max(0, endTime.getTime() - now.getTime());
+        timeRemaining = this.formatTimeRemaining(remaining);
+      }
+
+      if (plant.stage === 'GROWING' && plant.growingStartedAt) {
+        const endTime = new Date(
+          plant.growingStartedAt.getTime() + plant.growingDuration * 60 * 60 * 1000
+        );
+        const elapsed = now.getTime() - plant.growingStartedAt.getTime();
+        const total = plant.growingDuration * 60 * 60 * 1000;
+        progress = Math.min(100, Math.floor((elapsed / total) * 100));
+        
+        const remaining = Math.max(0, endTime.getTime() - now.getTime());
+        timeRemaining = this.formatTimeRemaining(remaining);
+        canWater = !plant.wateredBy.includes(userId);
+      }
 
       return {
         landId: land.id,
         plotIndex: land.plotIndex,
-        soilQuality: land.soilQuality,
         plant: {
           id: plant.id,
           type: plant.type,
+          name: config.name,
           stage: plant.stage,
-          interactions: plant.interactions,
           plantedAt: plant.plantedAt,
-          lastInteractedAt: plant.lastInteractedAt,
-          age: Math.floor((now.getTime() - plant.plantedAt.getTime()) / (1000 * 60 * 60 * 24)), // days
-          isGoldBranch: plant.isGoldBranch,
+          waterCount: plant.waterCount,
         },
-        growth: {
-          currentStage: plant.stage,
-          nextStage: nextStageInfo.nextStage,
-          progress: nextStageInfo.progress,
-          interactionsNeeded: nextStageInfo.interactionsNeeded,
+        progress: {
+          percentage: progress,
+          timeRemaining,
+          stage: plant.stage,
+          canWater,
         },
-        health: {
-          status: plant.stage === 'DEAD' ? 'DEAD' : isWilting ? 'WILTING' : 'HEALTHY',
-          hoursToWilt: plant.stage === 'DEAD' ? 0 : Math.floor(hoursToWilt),
-          isWilting,
+        config: {
+          diggingTime: `${config.diggingHours}h`,
+          growingTime: `${config.growingHours}h`,
+          totalTime: `${config.totalHours}h`,
+          baseYield: config.baseYield,
         },
-        watering: {
-          canWaterNow,
-          nextWaterTime: canWaterNow ? null : nextWaterTime,
-        },
-        status: plant.stage === 'FRUIT' ? 'READY_TO_HARVEST' : plant.stage === 'DEAD' ? 'DEAD' : 'GROWING',
       };
     });
   }
 
   /**
-   * Cron job: Check and mark wilted plants as DEAD
+   * Cron job: Auto-progress plants through phases
    */
-  async checkWiltStatus() {
-    const wiltThreshold = new Date(Date.now() - this.WILT_HOURS * 60 * 60 * 1000);
-
-    const result = await this.prisma.plant.updateMany({
+  @Cron(CronExpression.EVERY_HOUR)
+  async autoProgressPlants() {
+    const plants = await this.prisma.plant.findMany({
       where: {
-        lastInteractedAt: { lt: wiltThreshold },
-        stage: { not: 'DEAD' },
+        stage: { in: ['DIGGING', 'GROWING'] },
       },
-      data: { stage: 'DEAD' },
     });
 
-    if (result.count > 0) {
-      this.logger.warn(`Marked ${result.count} plants as DEAD due to 72h inactivity`);
+    for (const plant of plants) {
+      await this.checkGrowthCompletion(plant);
     }
 
-    return result;
+    this.logger.log(`Auto-progressed ${plants.length} plants`);
+  }
+
+  private formatTimeRemaining(ms: number): string {
+    const hours = Math.floor(ms / (1000 * 60 * 60));
+    const days = Math.floor(hours / 24);
+    
+    if (days > 0) return `${days}d ${hours % 24}h`;
+    return `${hours}h`;
   }
 }

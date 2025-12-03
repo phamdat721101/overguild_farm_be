@@ -20,6 +20,15 @@ export interface FundxEvent {
   }>;
 }
 
+export interface CreateFundxEventPayload {
+  name: string;
+  description?: string;
+  start_time: string;
+  end_time: string;
+  location: string;
+  creator_address: string;
+}
+
 export interface FundxApiResponse<T> {
   is_success: boolean;
   data: T;
@@ -80,6 +89,25 @@ export class FundxApiClient {
     } catch (error) {
       this.logger.error(`Failed to fetch event ${eventId} from FundX:`, error.message);
       return null;
+    }
+  }
+
+  async createEvent(payload: CreateFundxEventPayload): Promise<FundxEvent> {
+    try {
+      const { data } = await this.client.post<FundxApiResponse<FundxEvent>>(
+        '/events',
+        payload,
+      );
+
+      if (!data.is_success || !data.data) {
+        throw new Error('FundX API returned unsuccessful response when creating event');
+      }
+
+      this.logger.log(`Created event "${data.data.name}" in FundX`);
+      return data.data;
+    } catch (error: any) {
+      this.logger.error('Failed to create event in FundX:', error.message);
+      throw error;
     }
   }
 }

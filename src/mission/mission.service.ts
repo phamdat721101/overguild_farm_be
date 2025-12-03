@@ -1,5 +1,6 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { SoulboundTokenService } from '../soulbound-token/soulbound-token.service';
 
 export enum MissionType {
   DAILY_CHECKIN = 'DAILY_CHECKIN',
@@ -76,7 +77,11 @@ export class MissionService {
     },
   };
 
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    @Inject(forwardRef(() => SoulboundTokenService))
+    private readonly soulboundTokenService: SoulboundTokenService,
+  ) {}
 
   /**
    * Initialize daily missions for a user
@@ -255,6 +260,13 @@ export class MissionService {
     }
 
     this.logger.log(`User ${userId} claimed reward for mission ${mission.missionType}`);
+
+    // Check and issue badges (mission-related)
+    try {
+      await this.soulboundTokenService.checkAndIssueBadges(userId);
+    } catch (error) {
+      this.logger.error(`Failed to check badges: ${error.message}`);
+    }
 
     return {
       success: true,

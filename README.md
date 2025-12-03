@@ -25,28 +25,45 @@ Backend service for OverGuild - A Web3 GameFi platform where users grow virtual 
 ## ✨ Features
 
 ### 🔐 Authentication
-- **Metamask Wallet Login** - Single-step wallet-based login (no signature)
+
+- **Wallet Registration** - Register new users with wallet address
+- **Wallet Login** - Login with existing wallet address (no signature)
 - **JWT Tokens** - Stateless authentication
 - **Auto-create Assets** - New users receive 1 Land + 1 Plant automatically
 
 ### 👤 User Management
+
 - **Profile Management** - Get/Update username, avatar, network
 - **Multi-chain Support** - Sui, Ethereum networks
-- **Inventory Tracking** - Seeds, items, event rewards
 - **QR Code Generation** - For user identity and social interactions
 
+### 📦 Inventory System
+
+- **Complete Item Management** - View, add, remove, transfer all items
+- **Item Categories** - Seeds, Fruits, Fertilizers, Event Rewards
+- **Filtering & Search** - Filter by category, search by item type
+- **Item Transfer** - Send items to other users (by wallet or user ID)
+- **Rich Metadata** - Item names, rarity, icons, descriptions
+- **Inventory Summary** - Quick overview of totals by category
+
 ### 📍 Event Check-in (Location Service)
+
 - **FundX Integration** - Microservice communication via REST API
 - **Active Events** - Get upcoming events from FundX
 - **Check-in System** - Validate event time and status
 - **Reward System** - 3x SEED_COMMON per check-in
 - **Duplicate Prevention** - One check-in per user per event
 
-### 🌱 Game Mechanics (MVP)
-- **Land Ownership** - Users can own multiple land plots
-- **Plant Growth** - Plants grow from SEED → SPROUT → BLOOM → FRUIT
-- **Social Watering** - Water other users' plants
-- **72h Wilt System** - Plants die if not interacted with for 72 hours
+### 🌱 Ecology Service (Plant Lifecycle)
+
+- **Auto Plant on Register** - New users receive 1 Land + 1 Plant (SEED stage) automatically
+- **Plant Growth Stages** - Plants grow through SEED → SPROUT → BLOOM → FRUIT
+- **Social Watering** - Water any plant to help it grow (rate limit: 1 water per hour per plant)
+- **Growth Thresholds** - 3 waters to SPROUT, 8 to BLOOM, 15 to FRUIT
+- **Harvest System** - Harvest fruits when plant reaches FRUIT stage (base 3 + bonus fruits)
+- **72h Wilt System** - Plants automatically marked as DEAD if not interacted with for 72 hours
+- **Cron Job** - Automatic wilt check runs every hour
+- **Health Status** - Real-time health tracking (HEALTHY, WILTING, CRITICAL, DEAD)
 
 ## 🛠 Tech Stack
 
@@ -62,7 +79,7 @@ Backend service for OverGuild - A Web3 GameFi platform where users grow virtual 
 
 ### Prerequisites
 
-- Node.js 18+ 
+- Node.js 18+
 - pnpm 8+
 - Supabase account
 - Git
@@ -70,17 +87,20 @@ Backend service for OverGuild - A Web3 GameFi platform where users grow virtual 
 ### Installation
 
 1. **Clone the repository**
+
 ```bash
 git clone https://github.com/FundX-OGX/Backend-Farm.git
 cd Backend-Farm
 ```
 
 2. **Install dependencies**
+
 ```bash
 pnpm install
 ```
 
 3. **Setup environment variables**
+
 ```bash
 cp env.example .env
 ```
@@ -88,11 +108,13 @@ cp env.example .env
 Edit `.env` with your credentials (see [Environment Variables](#-environment-variables))
 
 4. **Generate Prisma client**
+
 ```bash
 pnpm prisma generate
 ```
 
 5. **Run database migrations** (if needed)
+
 ```bash
 # Pull schema from Supabase
 pnpm prisma db pull
@@ -102,6 +124,7 @@ pnpm prisma db push
 ```
 
 6. **Start development server**
+
 ```bash
 pnpm run start:dev
 ```
@@ -202,7 +225,8 @@ http://localhost:3000/api
 #### Authentication
 
 ```http
-POST /auth/login                          # Login with wallet address
+POST /auth/register                        # Register new user
+POST /auth/login                           # Login with wallet address
 ```
 
 #### User Profile
@@ -220,12 +244,65 @@ GET  /events/active      # Get active/upcoming events
 POST /events/check-in    # Check-in to event
 ```
 
-#### Game (Future)
+#### Inventory Management
 
 ```http
-POST /plant/plant        # Plant a seed
-POST /plant/:id/water    # Water a plant
-POST /plant/:id/harvest  # Harvest fruits
+GET    /inventory                    # Get complete inventory (with filters)
+GET    /inventory/summary            # Get inventory summary
+POST   /inventory/add                # Add item (admin/system)
+DELETE /inventory/remove             # Remove item
+POST   /inventory/transfer           # Transfer item to another user
+GET    /inventory/check/:type/:amt   # Check item availability
+```
+
+#### Ecology Service (Garden & Plants)
+
+```http
+GET  /garden             # Get user's garden (all lands with plants and growth info)
+POST /plant/plant        # Plant a seed on a land plot
+PATCH /plant/:id/water   # Water a plant (social feature)
+POST /plant/:id/harvest  # Harvest fruits from mature plant
+```
+
+### Example: Register Flow
+
+```bash
+curl -X POST http://localhost:3000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "walletAddress": "0xYourAddress",
+    "username": "Alice",
+    "network": "sui",
+    "avatar": "https://example.com/avatar.png"
+  }'
+```
+
+Response:
+
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "id": "uuid",
+    "walletAddress": "0x...",
+    "username": "Alice",
+    "network": "sui",
+    "avatar": "https://example.com/avatar.png",
+    "xp": 0,
+    "reputationScore": 0,
+    "landsCount": 1,
+    "plantsCount": 1
+  }
+}
+```
+
+**Error Response (409 Conflict)** - If user already exists:
+
+```json
+{
+  "statusCode": 409,
+  "message": "User with this wallet address already exists"
+}
 ```
 
 ### Example: Login Flow
@@ -242,6 +319,7 @@ curl -X POST http://localhost:3000/auth/login \
 ```
 
 Response:
+
 ```json
 {
   "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -250,12 +328,128 @@ Response:
     "walletAddress": "0x...",
     "username": "Alice",
     "network": "sui",
+    "avatar": "https://example.com/avatar.png",
+    "xp": 0,
+    "reputationScore": 0,
     "landsCount": 1,
     "plantsCount": 1
-  },
-  "isNewUser": true
+  }
 }
 ```
+
+**Error Response (404 Not Found)** - If user doesn't exist:
+
+```json
+{
+  "statusCode": 404,
+  "message": "User not found. Please register first."
+}
+```
+
+### Example: Ecology Service Flow
+
+#### 1. Get Garden (View all plants)
+
+```bash
+curl -X GET http://localhost:3000/garden \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+Response:
+
+```json
+[
+  {
+    "landId": "uuid",
+    "plotIndex": 0,
+    "soilQuality": { "fertility": 50, "hydration": 50 },
+    "plant": {
+      "id": "plant-uuid",
+      "type": "SOCIAL",
+      "stage": "SEED",
+      "interactions": 0,
+      "plantedAt": "2025-11-29T...",
+      "lastInteractedAt": "2025-11-29T...",
+      "age": 0
+    },
+    "growth": {
+      "currentStage": "SEED",
+      "nextStage": "SPROUT",
+      "progress": 0,
+      "interactionsNeeded": 3
+    },
+    "health": {
+      "status": "HEALTHY",
+      "hoursToWilt": 71,
+      "isWilting": false,
+      "isCritical": false,
+      "wiltTime": "2025-12-02T...",
+      "message": "Plant is healthy. 71 hours until wilt"
+    },
+    "watering": {
+      "canWaterNow": true,
+      "nextWaterTime": null
+    },
+    "status": "GROWING"
+  }
+]
+```
+
+#### 2. Water Plant
+
+```bash
+curl -X PATCH http://localhost:3000/plant/PLANT_ID/water \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+Response:
+
+```json
+{
+  "plant": { ... },
+  "stageChanged": true,
+  "oldStage": "SEED",
+  "newStage": "SPROUT",
+  "interactions": 3,
+  "nextStage": "BLOOM",
+  "interactionsNeeded": 5,
+  "progress": 37,
+  "message": "🎉 Plant grew to SPROUT stage!"
+}
+```
+
+#### 3. Harvest Plant (when FRUIT stage)
+
+```bash
+curl -X POST http://localhost:3000/plant/PLANT_ID/harvest \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "harvest": {
+    "fruitYield": 6,
+    "baseYield": 3,
+    "bonusYield": 3,
+    "plantType": "SOCIAL",
+    "interactions": 15
+  },
+  "message": "🎉 Harvested 6 fruits! Land is now empty and ready for a new seed."
+}
+```
+
+#### Growth Stages:
+
+- **SEED** (0 interactions) → **SPROUT** (3 interactions) → **BLOOM** (8 interactions) → **FRUIT** (15 interactions)
+
+#### Wilt System:
+
+- Plants must be watered/interacted with within **72 hours** or they will be marked as **DEAD**
+- Health status: `HEALTHY` → `WILTING` (< 24h) → `CRITICAL` (< 12h) → `DEAD` (0h)
+- Cron job runs every hour to check and mark wilted plants
 
 ## 📁 Project Structure
 
@@ -279,9 +473,22 @@ backend-farm/
 │   │   ├── fundx-api.client.ts
 │   │   └── dto/
 │   │       └── check-in.dto.ts
-│   ├── land/                  # Land management (future)
-│   ├── plant/                 # Plant growth (future)
-│   ├── seed/                  # Seed inventory (future)
+│   ├── inventory/             # Inventory management module
+│   │   ├── inventory.controller.ts
+│   │   ├── inventory.service.ts
+│   │   ├── inventory.module.ts
+│   │   ├── constants/
+│   │   │   └── item-types.ts
+│   │   └── dto/
+│   │       ├── query-inventory.dto.ts
+│   │       └── add-item.dto.ts
+│   ├── land/                  # Land management
+│   ├── plant/                 # Plant growth & lifecycle
+│   ├── seed/                  # Seed operations
+│   ├── fertilizer/            # Fertilizer & composting
+│   ├── mission/               # Mission system
+│   ├── soulbound-token/       # Achievement badges
+│   ├── progression/           # User progression
 │   ├── supabase/              # Supabase client
 │   ├── app.module.ts          # Root module
 │   └── main.ts                # Entry point
@@ -352,11 +559,13 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 1. **Set environment variables** in platform dashboard
 
 2. **Build command**:
+
 ```bash
 pnpm install && pnpm prisma generate && pnpm run build
 ```
 
 3. **Start command**:
+
 ```bash
 pnpm run start:prod
 ```
@@ -412,20 +621,27 @@ This project is licensed under the MIT License.
 ## 🎯 Roadmap
 
 ### ✅ Phase 1 (MVP - Completed)
-- [x] Metamask authentication
+
+- [x] Wallet authentication (no signature)
 - [x] User profile management
 - [x] Event check-in system
 - [x] FundX API integration
 - [x] Reward system
 
-### 🚧 Phase 2 (In Progress)
-- [ ] Plant growth mechanics
-- [ ] Social watering system
-- [ ] Seed planting
-- [ ] Harvest & composting
-- [ ] 72h wilt mechanism (cron job)
+### ✅ Phase 2 (Completed)
+
+- [x] Plant growth mechanics (SEED → SPROUT → BLOOM → FRUIT)
+- [x] Social watering system
+- [x] Seed planting
+- [x] Harvest & composting
+- [x] 72h wilt mechanism (cron job runs every hour)
+- [x] **Inventory system** - Complete item management with transfer, filtering, search
+- [x] Fertilizer system with composting
+- [x] Mission system (daily/weekly)
+- [x] Soulbound tokens (achievement badges)
 
 ### 📅 Phase 3 (Planned)
+
 - [ ] Mission system (daily/weekly)
 - [ ] Marketplace
 - [ ] Land expansion
@@ -433,6 +649,7 @@ This project is licensed under the MIT License.
 - [ ] Soulbound tokens (on-chain)
 
 ### 🔮 Phase 4 (Future)
+
 - [ ] Guild system
 - [ ] Leaderboards
 - [ ] PvP mechanics
