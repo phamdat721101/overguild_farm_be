@@ -14,9 +14,6 @@ export const ITEM_TYPES = {
 
   // Fruits
   FRUIT: "FRUIT",
-  FRUIT_ALGAE: "FRUIT_ALGAE",
-  FRUIT_MUSHROOM: "FRUIT_MUSHROOM",
-  FRUIT_TREE: "FRUIT_TREE",
 
   // Fertilizers
   FERTILIZER_COMMON: "FERTILIZER_COMMON",
@@ -125,28 +122,6 @@ export const ITEM_REGISTRY: Record<string, ItemMetadata> = {
     category: "FRUITS",
     icon: "🍎",
     description: "Harvested fruit that can be composted into fertilizer",
-  },
-  [ITEM_TYPES.FRUIT_ALGAE]: {
-    name: "Algae Spore",
-    rarity: RARITY.COMMON,
-    category: "FRUITS",
-    icon: "🧫",
-    description:
-      "Spore harvested from ALGAE plants, used in crafting and exchanges",
-  },
-  [ITEM_TYPES.FRUIT_MUSHROOM]: {
-    name: "Mushroom",
-    rarity: RARITY.RARE,
-    category: "FRUITS",
-    icon: "🍄",
-    description: "MUSHROOM harvest, can be exchanged for phygital rewards",
-  },
-  [ITEM_TYPES.FRUIT_TREE]: {
-    name: "Tree Fruit",
-    rarity: RARITY.RARE,
-    category: "FRUITS",
-    icon: "🌳",
-    description: "TREE harvest token representing fully grown social trees",
   },
 
   // Fertilizers
