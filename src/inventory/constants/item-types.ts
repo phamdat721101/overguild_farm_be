@@ -8,9 +8,15 @@ export const ITEM_TYPES = {
   SEED_RARE: "SEED_RARE",
   SEED_EPIC: "SEED_EPIC",
   SEED_LEGENDARY: "SEED_LEGENDARY",
+  SEED_ALGAE: "SEED_ALGAE",
+  SEED_MUSHROOM: "SEED_MUSHROOM",
+  SEED_TREE: "SEED_TREE",
 
   // Fruits
   FRUIT: "FRUIT",
+  FRUIT_ALGAE: "FRUIT_ALGAE",
+  FRUIT_MUSHROOM: "FRUIT_MUSHROOM",
+  FRUIT_TREE: "FRUIT_TREE",
 
   // Fertilizers
   FERTILIZER_COMMON: "FERTILIZER_COMMON",
@@ -18,8 +24,21 @@ export const ITEM_TYPES = {
   FERTILIZER_EPIC: "FERTILIZER_EPIC",
   FERTILIZER_LEGENDARY: "FERTILIZER_LEGENDARY",
 
+  // Currency
+  GOLD: "GOLD",
+  GEM: "GEM",
+
+  // Reward boxes
+  REWARD_BOX: "REWARD_BOX",
+
   // Event Rewards
   EVENT_CHECKIN_REWARD: "EVENT_CHECKIN_REWARD",
+
+  // Additional Types
+  BUCKET: "BUCKET",
+  FRUIT_ALGAE: "FRUIT_ALGAE",
+  FRUIT_MUSHROOM: "FRUIT_MUSHROOM",
+  FRUIT_TREE: "FRUIT_TREE",
 } as const;
 
 export type ItemType = (typeof ITEM_TYPES)[keyof typeof ITEM_TYPES];
@@ -77,6 +96,27 @@ export const ITEM_REGISTRY: Record<string, ItemMetadata> = {
     icon: "🌲",
     description: "The rarest seed with extraordinary properties",
   },
+  [ITEM_TYPES.SEED_ALGAE]: {
+    name: "Algae Sprout",
+    rarity: RARITY.COMMON,
+    category: "SEEDS",
+    icon: "🌿",
+    description: "Fast-growing algae seed. 1h dig + 12h grow = 13h total.",
+  },
+  [ITEM_TYPES.SEED_MUSHROOM]: {
+    name: "Mushroom Spore",
+    rarity: RARITY.RARE,
+    category: "SEEDS",
+    icon: "🍄",
+    description: "Mushroom spore. 10h dig + 72h grow = 82h total. Craft from 5 algae fruits.",
+  },
+  [ITEM_TYPES.SEED_TREE]: {
+    name: "Tree Seed (NFT)",
+    rarity: RARITY.LEGENDARY,
+    category: "SEEDS",
+    icon: "🌳",
+    description: "Rare NFT tree seed. 3 days dig + 27 days grow = 30 days total.",
+  },
 
   // Fruits
   [ITEM_TYPES.FRUIT]: {
@@ -85,6 +125,28 @@ export const ITEM_REGISTRY: Record<string, ItemMetadata> = {
     category: "FRUITS",
     icon: "🍎",
     description: "Harvested fruit that can be composted into fertilizer",
+  },
+  [ITEM_TYPES.FRUIT_ALGAE]: {
+    name: "Algae Spore",
+    rarity: RARITY.COMMON,
+    category: "FRUITS",
+    icon: "🧫",
+    description:
+      "Spore harvested from ALGAE plants, used in crafting and exchanges",
+  },
+  [ITEM_TYPES.FRUIT_MUSHROOM]: {
+    name: "Mushroom",
+    rarity: RARITY.RARE,
+    category: "FRUITS",
+    icon: "🍄",
+    description: "MUSHROOM harvest, can be exchanged for phygital rewards",
+  },
+  [ITEM_TYPES.FRUIT_TREE]: {
+    name: "Tree Fruit",
+    rarity: RARITY.RARE,
+    category: "FRUITS",
+    icon: "🌳",
+    description: "TREE harvest token representing fully grown social trees",
   },
 
   // Fertilizers
@@ -117,6 +179,31 @@ export const ITEM_REGISTRY: Record<string, ItemMetadata> = {
     description: "Legendary fertilizer that boosts plant growth by 5 levels",
   },
 
+  // Currency
+  [ITEM_TYPES.GOLD]: {
+    name: "Gold",
+    rarity: RARITY.COMMON,
+    category: "CURRENCY",
+    icon: "🪙",
+    description: "In-game currency for marketplace trades.",
+  },
+  [ITEM_TYPES.GEM]: {
+    name: "Gem",
+    rarity: RARITY.EPIC,
+    category: "CURRENCY",
+    icon: "💎",
+    description: "Premium currency for special items and boosts.",
+  },
+
+  // Reward boxes
+  [ITEM_TYPES.REWARD_BOX]: {
+    name: "Reward Box",
+    rarity: RARITY.RARE,
+    category: "EVENT_REWARDS",
+    icon: "🎁",
+    description: "Mystery box from event check-in. Open to reveal random rewards!",
+  },
+
   // Event Rewards
   [ITEM_TYPES.EVENT_CHECKIN_REWARD]: {
     name: "Event Check-in Reward",
@@ -124,6 +211,36 @@ export const ITEM_REGISTRY: Record<string, ItemMetadata> = {
     category: "EVENT_REWARDS",
     icon: "🎟️",
     description: "Reward received from event check-ins",
+  },
+
+  // Additional Items
+  [ITEM_TYPES.BUCKET]: {
+    name: "Bucket (Xẻng)",
+    rarity: RARITY.COMMON,
+    category: "TOOLS",
+    icon: "🪣",
+    description: "Required for digging and planting. One bucket per plant.",
+  },
+  [ITEM_TYPES.FRUIT_ALGAE]: {
+    name: "Algae Fruit",
+    rarity: RARITY.COMMON,
+    category: "FRUITS",
+    icon: "🌿",
+    description: "Harvested from Algae plants. 5 = 1 Mushroom seed.",
+  },
+  [ITEM_TYPES.FRUIT_MUSHROOM]: {
+    name: "Mushroom",
+    rarity: RARITY.RARE,
+    category: "FRUITS",
+    icon: "🍄",
+    description: "Harvested from Mushroom plants.",
+  },
+  [ITEM_TYPES.FRUIT_TREE]: {
+    name: "Tree Fruit",
+    rarity: RARITY.EPIC,
+    category: "FRUITS",
+    icon: "🍎",
+    description: "Harvested from Tree plants after 30 days.",
   },
 };
 

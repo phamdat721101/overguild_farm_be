@@ -21,6 +21,8 @@ export class UserService {
         discord: true,
         xp: true,
         reputationScore: true,
+        balanceRuby: true,
+        balanceGold: true,
         createdAt: true,
         updatedAt: true,
         lands: {
@@ -57,6 +59,8 @@ export class UserService {
         discord: true,
         xp: true,
         reputationScore: true,
+        balanceRuby: true,
+        balanceGold: true,
         createdAt: true,
         updatedAt: true,
       },

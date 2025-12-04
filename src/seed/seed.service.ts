@@ -86,11 +86,8 @@ export class SeedService {
    * Craft MUSHROOM seed from 5 ALGAE fruits
    */
   async craftMushroom(userId: string) {
-    // Check if user has 5 ALGAE fruits
     const algaeFruit = await this.prisma.inventoryItem.findUnique({
-      where: {
-        userId_itemType: { userId, itemType: 'FRUIT_ALGAE' },
-      },
+      where: { userId_itemType: { userId, itemType: 'FRUIT_ALGAE' } },
     });
 
     if (!algaeFruit || algaeFruit.amount < 5) {
@@ -103,13 +100,18 @@ export class SeedService {
       data: { amount: { decrement: 5 } },
     });
 
-    // Add MUSHROOM seed
-    const seed = await this.addSeed(userId, 'MUSHROOM', 'COMMON');
+    // Add MUSHROOM seed to inventory
+    await this.prisma.inventoryItem.upsert({
+      where: { userId_itemType: { userId, itemType: 'SEED_MUSHROOM' } },
+      create: { userId, itemType: 'SEED_MUSHROOM', amount: 1 },
+      update: { amount: { increment: 1 } },
+    });
 
     return {
       success: true,
-      seed,
       message: '🍄 Crafted 1 MUSHROOM seed from 5 ALGAE fruits!',
+      cost: { FRUIT_ALGAE: 5 },
+      received: { SEED_MUSHROOM: 1 },
     };
   }
 

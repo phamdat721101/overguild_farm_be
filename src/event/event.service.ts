@@ -5,13 +5,32 @@ import { CreateEventDto } from './dto/create-event.dto';
 import { FundxEvent } from './fundx-api.client';
 import { MissionService } from '../mission/mission.service';
 
+interface RewardBoxItem {
+  itemType: string;
+  amount: number;
+  rarity: string;
+  probability: number; // percentage
+  icon: string;
+  name: string;
+}
+
 @Injectable()
 export class EventService {
   private readonly logger = new Logger(EventService.name);
 
+  // Meetup reward box drop rates (total = 100%)
+  private readonly REWARD_BOX_TABLE: RewardBoxItem[] = [
+    { itemType: 'SEED_TREE', amount: 1, rarity: 'LEGENDARY', probability: 3, icon: '🌳', name: 'Tree Seed (NFT)' },
+    { itemType: 'FERTILIZER_RARE', amount: 1, rarity: 'RARE', probability: 5, icon: '💊', name: 'Growth Potion (Rare)' },
+    { itemType: 'SEED_MUSHROOM', amount: 2, rarity: 'RARE', probability: 10, icon: '🍄🍄', name: '2x Mushroom Spores' },
+    { itemType: 'SEED_MUSHROOM', amount: 1, rarity: 'RARE', probability: 15, icon: '🍄', name: '1x Mushroom Spore' },
+    { itemType: 'SEED_ALGAE', amount: 3, rarity: 'COMMON', probability: 20, icon: '🌿🌿🌿', name: '3x Algae Sprouts' },
+    { itemType: 'GEM', amount: 50, rarity: 'EPIC', probability: 12, icon: '💎', name: '50 Gems' },
+    { itemType: 'GOLD', amount: 300, rarity: 'COMMON', probability: 35, icon: '🪙', name: '300 Gold' },
+  ];
+
   constructor(
     private readonly prisma: PrismaClient,
-    // Giữ FundxApiClient cho tương lai nếu cần sync với FundX, hiện tại không dùng
     @Inject(forwardRef(() => MissionService))
     private readonly missionService: MissionService,
   ) {}
@@ -27,7 +46,6 @@ export class EventService {
   }
 
   async createEvent(creatorWallet: string, dto: CreateEventDto) {
-    // Lưu event vào bảng local `events`
     const event = await this.prisma.event.create({
       data: {
         name: dto.name,
@@ -35,23 +53,17 @@ export class EventService {
         location: dto.location,
         startTime: new Date(dto.startTime),
         endTime: new Date(dto.endTime),
+        creatorWallet, // ✅ This will now work after migration
       },
     });
 
-    this.logger.log(
-      `Created local event "${event.name}" (${event.id}) by wallet ${creatorWallet.toLowerCase()}`,
-    );
-
-    return {
-      id: event.id,
-      name: event.name,
-      description: event.description,
-      location: event.location,
-      startTime: event.startTime,
-      endTime: event.endTime,
-    };
+    this.logger.log(`Created event "${event.name}" (${event.id})`);
+    return event;
   }
 
+  /**
+   * Check in to event - now gives reward box instead of direct seeds
+   */
   async checkIn(userId: string, dto: CheckInDto) {
     const { eventId, verificationCode } = dto;
 
@@ -93,25 +105,25 @@ export class EventService {
       );
     }
 
-    // Reward: Add 3 SEED_COMMON to inventory
-    const seedReward = await this.prisma.inventoryItem.upsert({
+    // Give reward box token (unopened)
+    const boxToken = await this.prisma.inventoryItem.upsert({
       where: {
         userId_itemType: {
           userId,
-          itemType: 'SEED_COMMON',
+          itemType: `REWARD_BOX_${eventId}`,
         },
       },
       create: {
         userId,
-        itemType: 'SEED_COMMON',
-        amount: 3,
+        itemType: `REWARD_BOX_${eventId}`,
+        amount: 1,
       },
       update: {
-        amount: { increment: 3 },
+        amount: { increment: 1 },
       },
     });
 
-    // Mark check-in (to prevent duplicates)
+    // Mark check-in to prevent duplicates
     await this.prisma.inventoryItem.create({
       data: {
         userId,
@@ -121,7 +133,7 @@ export class EventService {
     });
 
     this.logger.log(
-      `User ${userId} checked in to "${event.name}" (${eventId}), received 3 seeds`,
+      `User ${userId} checked in to "${event.name}" (${eventId}), received reward box`,
     );
 
     // Track mission progress
@@ -143,10 +155,130 @@ export class EventService {
         endTime: event.endTime,
       },
       reward: {
-        itemType: 'SEED_COMMON',
-        amount: 3,
-        totalAmount: seedReward.amount,
+        itemType: `REWARD_BOX_${eventId}`,
+        amount: 1,
+        message: '🎁 You received a reward box! Open it to see what you got!',
       },
+    };
+  }
+
+  /**
+   * Open reward box - weighted random selection
+   */
+  async openRewardBox(userId: string, eventId: string) {
+    // Check if user has the reward box
+    const boxItem = await this.prisma.inventoryItem.findUnique({
+      where: {
+        userId_itemType: {
+          userId,
+          itemType: `REWARD_BOX_${eventId}`,
+        },
+      },
+    });
+
+    if (!boxItem || boxItem.amount < 1) {
+      throw new BadRequestException('You do not have a reward box for this event');
+    }
+
+    // Get event info
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    // Roll reward using weighted random
+    const reward = this.rollReward();
+
+    // Consume reward box
+    if (boxItem.amount === 1) {
+      await this.prisma.inventoryItem.delete({
+        where: { id: boxItem.id },
+      });
+    } else {
+      await this.prisma.inventoryItem.update({
+        where: { id: boxItem.id },
+        data: { amount: { decrement: 1 } },
+      });
+    }
+
+    // Give reward to user
+    await this.prisma.inventoryItem.upsert({
+      where: {
+        userId_itemType: {
+          userId,
+          itemType: reward.itemType,
+        },
+      },
+      create: {
+        userId,
+        itemType: reward.itemType,
+        amount: reward.amount,
+      },
+      update: {
+        amount: { increment: reward.amount },
+      },
+    });
+
+    this.logger.log(
+      `User ${userId} opened reward box for event ${eventId}, got: ${reward.amount}x ${reward.itemType} (${reward.rarity})`,
+    );
+
+    return {
+      success: true,
+      event: {
+        id: event.id,
+        name: event.name,
+      },
+      reward: {
+        itemType: reward.itemType,
+        itemName: reward.name,
+        amount: reward.amount,
+        rarity: reward.rarity,
+        icon: reward.icon,
+        probability: reward.probability,
+      },
+      message: `🎉 You got ${reward.icon} ${reward.amount}x ${reward.name}!`,
+    };
+  }
+
+  /**
+   * Weighted random selection based on probability table
+   */
+  private rollReward(): RewardBoxItem {
+    // Generate random number 0-100
+    const roll = Math.random() * 100;
+    
+    let cumulativeProbability = 0;
+    
+    for (const item of this.REWARD_BOX_TABLE) {
+      cumulativeProbability += item.probability;
+      
+      if (roll < cumulativeProbability) {
+        return item;
+      }
+    }
+    
+    // Fallback (should never reach here if probabilities sum to 100)
+    return this.REWARD_BOX_TABLE[this.REWARD_BOX_TABLE.length - 1];
+  }
+
+  /**
+   * Get reward box drop rates (for display to users)
+   */
+  getRewardBoxRates() {
+    return {
+      dropRates: this.REWARD_BOX_TABLE.map(item => ({
+        itemName: item.name,
+        itemType: item.itemType,
+        amount: item.amount,
+        rarity: item.rarity,
+        probability: item.probability,
+        icon: item.icon,
+      })),
+      totalProbability: this.REWARD_BOX_TABLE.reduce((sum, item) => sum + item.probability, 0),
     };
   }
 
@@ -154,23 +286,12 @@ export class EventService {
     const now = new Date();
     const events = await this.prisma.event.findMany({
       where: {
-        endTime: {
-          gte: now,
-        },
+        endTime: { gte: now },
       },
-      orderBy: {
-        startTime: 'asc',
-      },
+      orderBy: { startTime: 'asc' },
     });
 
-    return events.map((event) => ({
-      id: event.id,
-      name: event.name,
-      description: event.description,
-      location: event.location,
-      startTime: event.startTime,
-      endTime: event.endTime,
-    }));
+    return events;
   }
 
   async getEventById(eventId: string) {
@@ -179,16 +300,9 @@ export class EventService {
     });
 
     if (!event) {
-      throw new NotFoundException(`Event ${eventId} not found`);
+      throw new NotFoundException('Event not found');
     }
 
-    return {
-      id: event.id,
-      name: event.name,
-      description: event.description,
-      location: event.location,
-      startTime: event.startTime,
-      endTime: event.endTime,
-    };
+    return event;
   }
 }

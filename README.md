@@ -46,6 +46,37 @@ Backend service for OverGuild - A Web3 GameFi platform where users grow virtual 
 - **Rich Metadata** - Item names, rarity, icons, descriptions
 - **Inventory Summary** - Quick overview of totals by category
 
+### 🎁 Phygital Exchange (Real-world Rewards)
+
+- **Multi-resource Pricing** - Redeem rewards using Trees / Mushrooms / Spores (FRUIT_TREE / FRUIT_MUSHROOM / FRUIT_ALGAE)
+- **Reward Catalog API** - `GET /phygital/rewards` returns price table + current balances
+- **Redeem Flow** - `POST /phygital/redeem` spends resources and records an off-chain redemption request
+- **History Tracking** - `GET /phygital/redemptions` lists past redemptions for the user
+
+| Reward                 | Exchange Cost                                |
+| ---------------------- | -------------------------------------------- |
+| **Tote Bag**           | 1 Tree / 7 Mushrooms / 14 Spores            |
+| **Lottery Ticket**     | 5 Trees / 50 Mushrooms / 100 Spores         |
+| **Razer Headset**      | 10 Trees / 200 Mushrooms / 400 Spores       |
+| **$300 Voucher**       | 50 Trees / 1000 Mushrooms / 2000 Spores     |
+| **1 Chi Gold 9999**    | 100 Trees / 2000 Mushrooms / 4000 Spores    |
+| **Latest iPhone**      | 150 Trees / 3000 Mushrooms / 6000 Spores    |
+| **1 Seed NFT**         | _5000 Mushrooms / 10000 Spores_ (no Trees)  |
+
+### 🛒 Gold Shop
+
+- **Gold Currency** - Uses `balanceGold` from the user profile as soft currency
+- **Weekly / Daily Limits** - Some items have per-day or per-week purchase caps
+- **Mushroom Spore Exchange** - Convert Algae Spores into Mushrooms via the shop
+
+| Item                    | Price / Requirement                            | Limit             |
+| ----------------------- | ---------------------------------------------- | ----------------- |
+| **Shovel**              | 500 Gold                                       | 1 / week          |
+| **Bug Catch Glove**     | 30 Gold                                        | Unlimited         |
+| **Growth Water**        | 100 Gold                                       | 1 / day           |
+| **Fish Food**           | 20 Gold                                        | Unlimited         |
+| **Mushroom Spore Swap** | 0 Gold + 5x Algae Spore (FRUIT_ALGAE) → 1x Mushroom (FRUIT_MUSHROOM) | 2 / week |
+
 ### 📍 Event Check-in (Location Service)
 
 - **FundX Integration** - Microservice communication via REST API
@@ -255,6 +286,21 @@ POST   /inventory/transfer           # Transfer item to another user
 GET    /inventory/check/:type/:amt   # Check item availability
 ```
 
+#### Shop
+
+```http
+GET  /shop/gold           # Get Gold Shop catalog and current gold balance
+POST /shop/gold/purchase  # Purchase an item from the Gold Shop
+```
+
+#### Phygital Exchange
+
+```http
+GET  /phygital/rewards      # Bảng giá + số dư hiện tại
+POST /phygital/redeem       # Đổi quà phygital
+GET  /phygital/redemptions  # Lịch sử đổi thưởng
+```
+
 #### Ecology Service (Garden & Plants)
 
 ```http
@@ -393,6 +439,48 @@ Response:
     "status": "GROWING"
   }
 ]
+```
+
+### Example: Phygital Exchange
+
+```bash
+TOKEN="YOUR_JWT"
+
+# 1. Xem bảng giá + số dư hiện tại
+curl -X GET http://localhost:3000/phygital/rewards \
+  -H "Authorization: Bearer $TOKEN"
+
+# 2. Đổi Túi Tote bằng 14 Bào tử (FRUIT_ALGAE)
+curl -X POST http://localhost:3000/phygital/redeem \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "rewardKey": "TOTE_BAG",
+    "paymentType": "SPORE",
+    "contact": "@farmer123",
+    "note": "Ship tại event OGX"
+  }'
+```
+
+Sample response:
+
+```json
+{
+  "success": true,
+  "message": "Đã đổi Túi Tote bằng Bào tử",
+  "reward": { "key": "TOTE_BAG", "name": "Túi Tote" },
+  "payment": {
+    "resource": "SPORE",
+    "label": "Bào tử",
+    "cost": 14,
+    "remaining": 26
+  },
+  "redemption": {
+    "id": "uuid",
+    "status": "PENDING",
+    "createdAt": "2025-12-04T13:00:00.000Z"
+  }
+}
 ```
 
 #### 2. Water Plant

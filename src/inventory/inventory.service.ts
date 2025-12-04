@@ -42,6 +42,24 @@ export class InventoryService {
 
     // Fruits
     FRUIT: { name: "Fruit", rarity: "COMMON", category: "FRUITS", icon: "🍎" },
+    FRUIT_ALGAE: {
+      name: "Bào tử Tảo",
+      rarity: "COMMON",
+      category: "FRUITS",
+      icon: "🧫",
+    },
+    FRUIT_MUSHROOM: {
+      name: "Nấm",
+      rarity: "RARE",
+      category: "FRUITS",
+      icon: "🍄",
+    },
+    FRUIT_TREE: {
+      name: "Trái Cây",
+      rarity: "EPIC",
+      category: "FRUITS",
+      icon: "🌳",
+    },
 
     // Fertilizers
     FERTILIZER_COMMON: {
@@ -84,7 +102,7 @@ export class InventoryService {
    * Get user's complete inventory with filtering
    */
   async getInventory(userId: string, category?: ItemCategory, search?: string) {
-    let whereClause: any = { userId };
+    const whereClause: any = { userId };
 
     // Apply category filter
     if (category && category !== ItemCategory.ALL) {
@@ -145,7 +163,10 @@ export class InventoryService {
 
       if (item.itemType.startsWith("SEED_")) {
         summary.seeds += item.amount;
-      } else if (item.itemType === "FRUIT") {
+      } else if (
+        item.itemType === "FRUIT" ||
+        item.itemType.startsWith("FRUIT_")
+      ) {
         summary.fruits += item.amount;
       } else if (item.itemType.startsWith("FERTILIZER_")) {
         summary.fertilizers += item.amount;
@@ -196,7 +217,7 @@ export class InventoryService {
 
     if (!item || item.amount < dto.amount) {
       throw new BadRequestException(
-        `Not enough ${dto.itemType}. You have ${item?.amount || 0}, need ${dto.amount}`
+        `Not enough ${dto.itemType}. You have ${item?.amount || 0}, need ${dto.amount}`,
       );
     }
 
@@ -214,7 +235,7 @@ export class InventoryService {
     }
 
     this.logger.log(
-      `Removed ${dto.amount}x ${dto.itemType} from user ${userId}`
+      `Removed ${dto.amount}x ${dto.itemType} from user ${userId}`,
     );
 
     return {
@@ -255,7 +276,7 @@ export class InventoryService {
 
     if (!senderItem || senderItem.amount < dto.amount) {
       throw new BadRequestException(
-        `Not enough ${dto.itemType}. You have ${senderItem?.amount || 0}, need ${dto.amount}`
+        `Not enough ${dto.itemType}. You have ${senderItem?.amount || 0}, need ${dto.amount}`,
       );
     }
 
@@ -290,7 +311,7 @@ export class InventoryService {
     });
 
     this.logger.log(
-      `User ${senderId} transferred ${dto.amount}x ${dto.itemType} to ${recipient.id} (${recipient.walletAddress})`
+      `User ${senderId} transferred ${dto.amount}x ${dto.itemType} to ${recipient.id} (${recipient.walletAddress})`,
     );
 
     return {
@@ -313,7 +334,7 @@ export class InventoryService {
   async hasItem(
     userId: string,
     itemType: string,
-    amount: number = 1
+    amount: number = 1,
   ): Promise<boolean> {
     const item = await this.prisma.inventoryItem.findUnique({
       where: {
@@ -325,22 +346,33 @@ export class InventoryService {
   }
 
   /**
+   * Backwards-compatible alias for hasItem (for other modules)
+   */
+  async hasItemAmount(
+    userId: string,
+    itemType: string,
+    amount: number = 1,
+  ): Promise<boolean> {
+    return this.hasItem(userId, itemType, amount);
+  }
+
+  /**
    * Get item types by category
    */
   private getItemTypesByCategory(category: ItemCategory): string[] {
     const categoryMap = {
       [ItemCategory.SEEDS]: Object.keys(this.ITEM_METADATA).filter((k) =>
-        k.startsWith("SEED_")
+        k.startsWith("SEED_"),
       ),
       [ItemCategory.FRUITS]: ["FRUIT"],
       [ItemCategory.FERTILIZERS]: Object.keys(this.ITEM_METADATA).filter((k) =>
-        k.startsWith("FERTILIZER_")
+        k.startsWith("FERTILIZER_"),
       ),
       [ItemCategory.EVENT_REWARDS]: Object.keys(this.ITEM_METADATA).filter(
-        (k) => k.includes("EVENT")
+        (k) => k.includes("EVENT"),
       ),
       [ItemCategory.CONSUMABLES]: Object.keys(this.ITEM_METADATA).filter(
-        (k) => k.startsWith("FERTILIZER_") || k === "FRUIT"
+        (k) => k.startsWith("FERTILIZER_") || k === "FRUIT",
       ),
     };
 

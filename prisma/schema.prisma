@@ -14,6 +14,8 @@ model User {
   username        String?
   xp              Int      @default(0)
   reputationScore Int      @default(0) @map("reputation_score")
+  balanceRuby     Int      @default(0) @map("balance_ruby")
+  balanceGold     Int      @default(0) @map("balance_gold")
   createdAt       DateTime @default(now()) @map("created_at")
   // Primary network label for display only. Actual multi-chain
   // addresses can be handled separately later.
@@ -31,6 +33,8 @@ model User {
   missionLogs     MissionLog[]
   soulboundTokens SoulboundToken[]
   seeds           Seed[]
+  phygitalRedemptions PhygitalRedemption[]
+  shopPurchases  ShopPurchase[]
 
   @@map("users")
 }
@@ -168,14 +172,46 @@ model SoulboundToken {
 
 // --- EVENTS (local OverGuild events, decoupled from FundX) ---
 model Event {
+  id            String   @id @default(dbgenerated("gen_random_uuid()"))
+  name          String
+  description   String?
+  location      String
+  startTime     DateTime @map("start_time")
+  endTime       DateTime @map("end_time")
+  creatorWallet String   @map("creator_wallet") // ✅ Add this field
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("events")
+}
+
+model PhygitalRedemption {
   id          String   @id @default(dbgenerated("gen_random_uuid()"))
-  name        String
-  description String?
-  location    String
-  startTime   DateTime @map("start_time")
-  endTime     DateTime @map("end_time")
+  userId      String   @map("user_id")
+  rewardKey   String   @map("reward_key")
+  paymentType String   @map("payment_type")
+  costAmount  Int      @map("cost_amount")
+  status      String   @default("PENDING")
+  metadata    Json?
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
 
-  @@map("events")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("phygital_redemptions")
+}
+
+model ShopPurchase {
+  id        String   @id @default(dbgenerated("gen_random_uuid()"))
+  userId    String   @map("user_id")
+  shopType  String   @map("shop_type") // e.g. GOLD
+  itemKey   String   @map("item_key")  // e.g. SHOVEL, BUG_GLOVE
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, shopType, itemKey, createdAt])
+  @@map("shop_purchases")
 }
