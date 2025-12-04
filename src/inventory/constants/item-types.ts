@@ -36,6 +36,9 @@ export const ITEM_TYPES = {
   FRUIT_ALGAE: "FRUIT_ALGAE",
   FRUIT_MUSHROOM: "FRUIT_MUSHROOM",
   FRUIT_TREE: "FRUIT_TREE",
+
+  // Water (for daily check-in)
+  WATER: "WATER",
 } as const;
 
 export type ItemType = (typeof ITEM_TYPES)[keyof typeof ITEM_TYPES];
@@ -216,6 +219,16 @@ export const ITEM_REGISTRY: Record<string, ItemMetadata> = {
     category: "FRUITS",
     icon: "🍎",
     description: "Harvested from Tree plants after 30 days.",
+  },
+
+  // Water (for daily check-in)
+  [ITEM_TYPES.WATER]: {
+    name: "Water Drop",
+    rarity: RARITY.COMMON,
+    category: "CONSUMABLES",
+    icon: "💧",
+    description:
+      "Used to water plants. Receive daily from check-ins. Each water adds +0.5 bonus fruit at harvest.",
   },
 };
 

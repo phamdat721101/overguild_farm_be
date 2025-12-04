@@ -1,11 +1,15 @@
 import { Injectable, Logger, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { SoulboundTokenService } from '../soulbound-token/soulbound-token.service';
 
+// ✅ Define enums locally (instead of importing from Prisma)
 export enum MissionType {
   DAILY_CHECKIN = 'DAILY_CHECKIN',
-  DAILY_WATER = 'DAILY_WATER',
-  WEEKLY_HARVEST = 'WEEKLY_HARVEST',
+  WATER_PLANTS = 'WATER_PLANTS',
+  HARVEST_FRUITS = 'HARVEST_FRUITS',
+  PLANT_SEEDS = 'PLANT_SEEDS',
+  SOCIAL_INTERACT = 'SOCIAL_INTERACT',
   HIDDEN_NIGHTOWL = 'HIDDEN_NIGHTOWL',
   HIDDEN_EARLYBIRD = 'HIDDEN_EARLYBIRD',
 }
@@ -22,11 +26,11 @@ interface MissionConfig {
   description: string;
   target: number;
   reward: {
-    xp: number;
-    reputation: number;
-    items?: { type: string; amount: number }[];
+    xp?: number;
+    reputation?: number;
+    items?: Array<{ type: string; amount: number }>;
   };
-  resetPeriod?: 'daily' | 'weekly' | 'never';
+  resetPeriod: 'daily' | 'weekly' | 'permanent';
 }
 
 @Injectable()
@@ -40,40 +44,72 @@ export class MissionService {
       name: 'Daily Check-in',
       description: 'Check in to 1 event today',
       target: 1,
-      reward: { xp: 10, reputation: 5, items: [{ type: 'SEED_COMMON', amount: 1 }] },
+      reward: { 
+        xp: 10, 
+        reputation: 5, 
+        items: [
+          { type: 'SEED_COMMON', amount: 1 },
+          { type: 'WATER', amount: 3 },
+        ] 
+      },
       resetPeriod: 'daily',
     },
-    [MissionType.DAILY_WATER]: {
-      type: MissionType.DAILY_WATER,
-      name: 'Social Sprinkler',
-      description: 'Water 3 plants today',
-      target: 3,
-      reward: { xp: 20, reputation: 10 },
-      resetPeriod: 'daily',
-    },
-    [MissionType.WEEKLY_HARVEST]: {
-      type: MissionType.WEEKLY_HARVEST,
-      name: 'Weekly Harvest',
-      description: 'Harvest 5 fruits this week',
+    [MissionType.WATER_PLANTS]: {
+      type: MissionType.WATER_PLANTS,
+      name: 'Green Thumb',
+      description: 'Water 5 plants',
       target: 5,
-      reward: { xp: 100, reputation: 50, items: [{ type: 'SEED_RARE', amount: 1 }] },
+      reward: { xp: 20, reputation: 10, items: [{ type: 'FERTILIZER_COMMON', amount: 1 }] },
+      resetPeriod: 'daily',
+    },
+    [MissionType.HARVEST_FRUITS]: {
+      type: MissionType.HARVEST_FRUITS,
+      name: 'Bountiful Harvest',
+      description: 'Harvest 3 plants',
+      target: 3,
+      reward: { xp: 30, reputation: 15, items: [{ type: 'SEED_RARE', amount: 1 }] },
+      resetPeriod: 'daily',
+    },
+    [MissionType.PLANT_SEEDS]: {
+      type: MissionType.PLANT_SEEDS,
+      name: 'Planter',
+      description: 'Plant 2 seeds',
+      target: 2,
+      reward: { xp: 15, reputation: 8 },
+      resetPeriod: 'daily',
+    },
+    [MissionType.SOCIAL_INTERACT]: {
+      type: MissionType.SOCIAL_INTERACT,
+      name: 'Social Butterfly',
+      description: 'Interact with 10 plants',
+      target: 10,
+      reward: { xp: 25, reputation: 12 },
       resetPeriod: 'weekly',
     },
+    // ✅ Add missing hidden missions
     [MissionType.HIDDEN_NIGHTOWL]: {
       type: MissionType.HIDDEN_NIGHTOWL,
       name: 'Night Owl',
-      description: 'Check in to an event between 10 PM - 2 AM',
-      target: 1,
-      reward: { xp: 50, reputation: 25, items: [{ type: 'SEED_RARE', amount: 1 }] },
-      resetPeriod: 'never',
+      description: 'Check in to events between 10 PM and 2 AM',
+      target: 3,
+      reward: { 
+        xp: 50, 
+        reputation: 20, 
+        items: [{ type: 'SEED_EPIC', amount: 1 }] 
+      },
+      resetPeriod: 'permanent',
     },
     [MissionType.HIDDEN_EARLYBIRD]: {
       type: MissionType.HIDDEN_EARLYBIRD,
       name: 'Early Bird',
-      description: 'Check in to an event before 10 AM',
-      target: 1,
-      reward: { xp: 50, reputation: 25, items: [{ type: 'SEED_RARE', amount: 1 }] },
-      resetPeriod: 'never',
+      description: 'Check in to events before 10 AM',
+      target: 5,
+      reward: { 
+        xp: 40, 
+        reputation: 15, 
+        items: [{ type: 'SEED_RARE', amount: 2 }] 
+      },
+      resetPeriod: 'permanent',
     },
   };
 
@@ -87,17 +123,21 @@ export class MissionService {
    * Initialize daily missions for a user
    */
   async initializeDailyMissions(userId: string) {
-    const dailyMissions = [MissionType.DAILY_CHECKIN, MissionType.DAILY_WATER];
+    const dailyMissions = [
+      MissionType.DAILY_CHECKIN, 
+      MissionType.WATER_PLANTS, 
+      MissionType.HARVEST_FRUITS, 
+      MissionType.PLANT_SEEDS
+    ];
 
     for (const missionType of dailyMissions) {
       const config = this.MISSION_CONFIGS[missionType];
       
-      // Check if mission already exists
       const existing = await this.prisma.mission.findFirst({
         where: {
           userId,
           missionType,
-          status: { in: ['active', 'completed'] },
+          status: { in: [MissionStatus.ACTIVE, MissionStatus.COMPLETED] },
         },
       });
 
@@ -120,7 +160,6 @@ export class MissionService {
    * Get all missions for a user
    */
   async getUserMissions(userId: string) {
-    // Initialize daily missions if not exist
     await this.initializeDailyMissions(userId);
 
     const missions = await this.prisma.mission.findMany({
@@ -185,16 +224,12 @@ export class MissionService {
    * Claim mission rewards
    */
   async claimReward(userId: string, missionId: string) {
-    const mission = await this.prisma.mission.findUnique({
-      where: { id: missionId },
+    const mission = await this.prisma.mission.findFirst({
+      where: { id: missionId, userId },
     });
 
     if (!mission) {
       throw new NotFoundException('Mission not found');
-    }
-
-    if (mission.userId !== userId) {
-      throw new BadRequestException('Mission does not belong to this user');
     }
 
     if (mission.status !== MissionStatus.COMPLETED) {
@@ -202,20 +237,17 @@ export class MissionService {
     }
 
     const config = this.MISSION_CONFIGS[mission.missionType as MissionType];
-    if (!config) {
-      throw new BadRequestException('Invalid mission type');
-    }
 
     // Update user XP and reputation
     await this.prisma.user.update({
       where: { id: userId },
       data: {
-        xp: { increment: config.reward.xp },
-        reputationScore: { increment: config.reward.reputation },
+        xp: { increment: config.reward.xp || 0 },
+        reputationScore: { increment: config.reward.reputation || 0 },
       },
     });
 
-    // Add item rewards
+    // Give item rewards
     if (config.reward.items) {
       for (const item of config.reward.items) {
         await this.prisma.inventoryItem.upsert({
@@ -234,86 +266,66 @@ export class MissionService {
       }
     }
 
-    // Mark mission as claimed
+    // Update mission status
     const updatedMission = await this.prisma.mission.update({
       where: { id: missionId },
       data: { status: MissionStatus.CLAIMED },
     });
 
-    // Log to mission_logs
+    // Create mission log
     await this.prisma.missionLog.create({
       data: {
         userId,
         missionType: mission.missionType,
-        progress: mission.progress,
-        target: mission.target,
+        target: config.target,
         status: MissionStatus.CLAIMED,
       },
     });
 
-    // Reset daily/weekly missions
-    if (config.resetPeriod === 'daily' || config.resetPeriod === 'weekly') {
-      await this.prisma.mission.delete({
-        where: { id: missionId },
-      });
-      this.logger.log(`Deleted ${config.resetPeriod} mission ${mission.missionType} for user ${userId}`);
-    }
+    this.logger.log(`User ${userId} claimed mission ${mission.missionType}`);
 
-    this.logger.log(`User ${userId} claimed reward for mission ${mission.missionType}`);
-
-    // Check and issue badges (mission-related)
-    try {
-      await this.soulboundTokenService.checkAndIssueBadges(userId);
-    } catch (error) {
-      this.logger.error(`Failed to check badges: ${error.message}`);
-    }
+    await this.soulboundTokenService.checkAndIssueBadges(userId).catch(() => {});
 
     return {
       success: true,
-      mission: {
-        id: updatedMission.id,
-        type: updatedMission.missionType,
-        name: config.name,
-      },
+      mission: updatedMission,
       rewards: {
         xp: config.reward.xp,
         reputation: config.reward.reputation,
-        items: config.reward.items || [],
+        items: config.reward.items,
       },
+      message: `🎉 Mission completed! Received ${config.reward.xp} XP, ${config.reward.reputation} reputation${config.reward.items ? `, and items: ${config.reward.items.map(i => `${i.amount}x ${i.type}`).join(', ')}` : ''}`,
     };
   }
 
   /**
-   * Track event check-in for missions
+   * Track event check-in
    */
   async trackEventCheckIn(userId: string, checkInTime: Date) {
     const hour = checkInTime.getHours();
 
-    // Update DAILY_CHECKIN mission
     await this.updateProgress(userId, MissionType.DAILY_CHECKIN, 1);
 
-    // Check for hidden missions
+    // Hidden missions
     if (hour >= 22 || hour <= 2) {
-      // Night Owl (10 PM - 2 AM)
       await this.updateProgress(userId, MissionType.HIDDEN_NIGHTOWL, 1);
     } else if (hour < 10) {
-      // Early Bird (before 10 AM)
       await this.updateProgress(userId, MissionType.HIDDEN_EARLYBIRD, 1);
     }
   }
 
   /**
-   * Track plant watering for missions
+   * Track plant watering
    */
   async trackPlantWater(userId: string) {
-    await this.updateProgress(userId, MissionType.DAILY_WATER, 1);
+    await this.updateProgress(userId, MissionType.WATER_PLANTS, 1);
   }
 
   /**
-   * Track fruit harvest for missions
+   * Track fruit harvest
    */
   async trackFruitHarvest(userId: string) {
-    await this.updateProgress(userId, MissionType.WEEKLY_HARVEST, 1);
+    await this.updateProgress(userId, MissionType.HARVEST_FRUITS, 1);
   }
 }
 

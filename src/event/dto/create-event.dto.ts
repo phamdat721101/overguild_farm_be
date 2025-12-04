@@ -37,6 +37,13 @@ export class CreateEventDto {
   })
   @IsString()
   location: string;
+
+   @ApiProperty({
+    description: 'Creator wallet',
+    example: '0xd5ff68d3176e0bf698563e694ba5e7133584754c',
+  })
+  @IsString()
+  creatorWallet: string;
 }
 
 

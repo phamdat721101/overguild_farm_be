@@ -14,12 +14,49 @@ export class PlantController {
 
   @Get('garden')
   @ApiOperation({ 
-    summary: 'Get user\'s garden (all plants with growth info)',
-    description: 'Returns all lands with plants, growth progress, health status, and time to wilt'
+    summary: 'Get user\'s garden (all plants with water info)',
+    description: 'Returns all lands with plants, growth progress, water count, and watering status'
   })
   @ApiResponse({
     status: 200,
-    description: 'Garden data with all plants',
+    description: 'Garden data with water tracking',
+    schema: {
+      example: [{
+        landId: 'land-uuid',
+        plotIndex: 0,
+        plant: {
+          id: 'plant-uuid',
+          type: 'ALGAE',
+          name: 'Tảo (Algae)',
+          stage: 'GROWING',
+          plantedAt: '2025-12-03T10:00:00.000Z',
+          waterCount: 5,
+          interactions: 5,
+          lastWateredAt: '2025-12-03T12:00:00.000Z',
+        },
+        progress: {
+          percentage: 50,
+          timeRemaining: '6h',
+          currentPhase: 'GROWING',
+          canWater: true,
+          isHarvestable: false,
+        },
+        water: {
+          totalWaters: 5,
+          uniqueWaterers: 3,
+          waterBonus: 2,
+          expectedYield: 5,
+          canWaterToday: true,
+          nextWaterTime: 'Now',
+        },
+        config: {
+          totalTime: '12h',
+          baseYield: 3,
+          bonusPerWater: 0.5,
+        },
+        message: '⏳ 6h until ready',
+      }],
+    },
   })
   getGarden(@CurrentUser('sub') userId: string) {
     return this.plantService.getGarden(userId);
@@ -44,16 +81,29 @@ export class PlantController {
 
   @Patch('plant/:id/water')
   @ApiOperation({ 
-    summary: 'Water a plant (social feature)',
-    description: 'Water any plant to help it grow. Rate limit: 1 water per hour per plant'
+    summary: 'Water a plant (once per day per user)',
+    description: 'Water any plant to help it grow. Each water adds +0.5 bonus fruit. Limit: 1 water per user per plant per day'
   })
   @ApiResponse({
     status: 200,
     description: 'Plant watered successfully',
+    schema: {
+      example: {
+        plant: {
+          id: 'plant-uuid',
+          waterCount: 6,
+          lastWateredAt: '2025-12-03T13:00:00.000Z',
+        },
+        message: '💧 Plant watered successfully! +0.5 bonus fruit at harvest',
+        waterCount: 6,
+        totalWaterers: 4,
+        canWaterAgainIn: '24h',
+      },
+    },
   })
   @ApiResponse({
     status: 400,
-    description: 'Plant was recently watered or is dead/ready to harvest',
+    description: 'Already watered today or plant not waterable',
   })
   water(@Param('id') plantId: string, @CurrentUser('sub') userId: string) {
     return this.plantService.waterPlant(plantId, userId);

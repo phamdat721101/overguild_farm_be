@@ -189,9 +189,82 @@ export class PlantService {
   }
 
   /**
-   * Water a plant (only during GROWING phase)
+   * ✅ IMPROVED: Water a plant with duplicate prevention
    */
   async waterPlant(plantId: string, watererId: string) {
+    const plant = await this.prisma.plant.findUnique({
+      where: { id: plantId },
+      include: { land: true },
+    });
+
+    if (!plant) {
+      throw new NotFoundException('Plant not found');
+    }
+
+    if (plant.stage === 'DIGGING') {
+      throw new BadRequestException('Cannot water during digging phase. Wait for sprout to appear.');
+    }
+
+    if (plant.stage === 'MATURE') {
+      throw new BadRequestException('Plant is ready to harvest!');
+    }
+
+    if (plant.stage === 'DEAD') {
+      throw new BadRequestException('Cannot water a dead plant.');
+    }
+
+    // ✅ Check if user already watered this plant today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (plant.wateredBy.includes(watererId)) {
+      const lastWatered = plant.lastWateredAt;
+      if (lastWatered) {
+        const lastWateredDate = new Date(lastWatered);
+        lastWateredDate.setHours(0, 0, 0, 0);
+        
+        if (lastWateredDate.getTime() === today.getTime()) {
+          throw new BadRequestException('You already watered this plant today. Come back tomorrow! 💧');
+        }
+      }
+    }
+
+    // ✅ Update plant with user tracking
+    const updatedPlant = await this.prisma.plant.update({
+      where: { id: plantId },
+      data: {
+        waterCount: { increment: 1 },
+        interactions: { increment: 1 },
+        lastInteractedAt: new Date(),
+        lastWateredAt: new Date(),
+        wateredBy: {
+          set: [...new Set([...plant.wateredBy, watererId])], // Add user to list (no duplicates)
+        },
+      },
+      include: { land: true },
+    });
+
+    // Check if stage should progress
+    await this.checkGrowthProgression(updatedPlant);
+
+    // Track mission
+    await this.missionService.trackPlantWater(watererId).catch(() => {});
+
+    this.logger.log(`User ${watererId} watered plant ${plantId} (owner: ${plant.land.userId})`);
+
+    return {
+      plant: updatedPlant,
+      message: '💧 Plant watered successfully! +0.5 bonus fruit at harvest',
+      waterCount: updatedPlant.waterCount,
+      totalWaterers: updatedPlant.wateredBy.length,
+      canWaterAgainIn: '24h',
+    };
+  }
+
+  /**
+   * Water a plant (only during GROWING phase)
+   */
+  async waterPlantLegacy(plantId: string, watererId: string) {
     const plant = await this.prisma.plant.findUnique({
       where: { id: plantId },
       include: { land: true },
@@ -378,6 +451,8 @@ export class PlantService {
     });
 
     const now = new Date();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
     return lands.map(land => {
       if (!land.plant) {
@@ -416,6 +491,23 @@ export class PlantService {
 
       const isHarvestable = plant.stage === 'MATURE';
 
+      // ✅ Calculate expected yield with water bonus
+      const baseYield = config.baseYield;
+      const waterBonus = Math.floor(plant.waterCount * 0.5);
+      const expectedYield = baseYield + waterBonus;
+
+      // ✅ Check if current user can water
+      let canWaterToday = false;
+      if (plant.stage !== 'DIGGING' && plant.stage !== 'MATURE' && plant.stage !== 'DEAD') {
+        if (!plant.wateredBy.includes(userId)) {
+          canWaterToday = true;
+        } else if (plant.lastWateredAt) {
+          const lastWateredDate = new Date(plant.lastWateredAt);
+          lastWateredDate.setHours(0, 0, 0, 0);
+          canWaterToday = lastWateredDate.getTime() < today.getTime();
+        }
+      }
+
       return {
         landId: land.id,
         plotIndex: land.plotIndex,
@@ -427,13 +519,22 @@ export class PlantService {
           plantedAt: plant.plantedAt,
           waterCount: plant.waterCount,
           interactions: plant.interactions,
+          lastWateredAt: plant.lastWateredAt,
         },
         progress: {
           percentage: progress,
           timeRemaining,
           currentPhase,
-          canWater: plant.stage !== 'DIGGING' && plant.stage !== 'MATURE',
+          canWater: canWaterToday,
           isHarvestable,
+        },
+        water: {
+          totalWaters: plant.waterCount,
+          uniqueWaterers: plant.wateredBy.length,
+          waterBonus: waterBonus,
+          expectedYield,
+          canWaterToday,
+          nextWaterTime: canWaterToday ? 'Now' : 'Tomorrow',
         },
         config: {
           totalTime: `${config.totalHours}h`,
@@ -441,7 +542,7 @@ export class PlantService {
           bonusPerWater: 0.5,
         },
         message: isHarvestable 
-          ? `🎉 Ready to harvest! Expected yield: ${config.baseYield + Math.floor(plant.waterCount * 0.5)}` 
+          ? `🎉 Ready to harvest! Expected yield: ${expectedYield}` 
           : `⏳ ${timeRemaining} until ready`,
       };
     });
@@ -482,6 +583,24 @@ export class PlantService {
       this.logger.warn(`Marked ${result.count} plants as DEAD due to no watering for 72h`);
     }
 
+    return result;
+  }
+
+  /**
+   * ✅ IMPROVED: Daily reset of wateredBy list (runs at midnight)
+   */
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  async resetDailyWaterTracking() {
+    const result = await this.prisma.plant.updateMany({
+      where: {
+        wateredBy: { isEmpty: false },
+      },
+      data: {
+        wateredBy: { set: [] }, // Reset list for new day
+      },
+    });
+
+    this.logger.log(`Reset water tracking for ${result.count} plants (new day)`);
     return result;
   }
 

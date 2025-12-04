@@ -53,7 +53,7 @@ export class EventService {
         location: dto.location,
         startTime: new Date(dto.startTime),
         endTime: new Date(dto.endTime),
-        creatorWallet, // ✅ This will now work after migration
+        creatorWallet: dto.creatorWallet, // ✅ This will now work after migration
       },
     });
 
@@ -62,7 +62,7 @@ export class EventService {
   }
 
   /**
-   * Check in to event - now gives reward box instead of direct seeds
+   * Check in to event - gives reward box + water
    */
   async checkIn(userId: string, dto: CheckInDto) {
     const { eventId, verificationCode } = dto;
@@ -123,6 +123,21 @@ export class EventService {
       },
     });
 
+    // ✅ Give daily water for check-in
+    await this.prisma.inventoryItem.upsert({
+      where: {
+        userId_itemType: { userId, itemType: 'WATER' },
+      },
+      create: {
+        userId,
+        itemType: 'WATER',
+        amount: 3,
+      },
+      update: {
+        amount: { increment: 3 },
+      },
+    });
+
     // Mark check-in to prevent duplicates
     await this.prisma.inventoryItem.create({
       data: {
@@ -133,7 +148,7 @@ export class EventService {
     });
 
     this.logger.log(
-      `User ${userId} checked in to "${event.name}" (${eventId}), received reward box`,
+      `User ${userId} checked in to "${event.name}" (${eventId}), received reward box + 3 water`,
     );
 
     // Track mission progress
@@ -142,7 +157,6 @@ export class EventService {
       this.logger.log(`Mission progress updated for user ${userId}`);
     } catch (error) {
       this.logger.error(`Failed to update mission progress: ${error.message}`);
-      // Don't fail check-in if mission tracking fails
     }
 
     return {
@@ -154,11 +168,19 @@ export class EventService {
         startTime: event.startTime,
         endTime: event.endTime,
       },
-      reward: {
-        itemType: `REWARD_BOX_${eventId}`,
-        amount: 1,
-        message: '🎁 You received a reward box! Open it to see what you got!',
-      },
+      rewards: [
+        {
+          itemType: `REWARD_BOX_${eventId}`,
+          amount: 1,
+          message: '🎁 Reward box received!',
+        },
+        {
+          itemType: 'WATER',
+          amount: 3,
+          message: '💧 3 water drops received!',
+        },
+      ],
+      message: '✅ Checked in successfully! Received 1 reward box + 3 water drops',
     };
   }
 
