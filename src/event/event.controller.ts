@@ -103,8 +103,8 @@ export class EventController {
   }
 
   @Post("offline-check-in")
-  // @ApiBearerAuth("JWT-auth")
-  // @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth("JWT-auth")
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: "Offline check-in with code (no location required)",
     description:
