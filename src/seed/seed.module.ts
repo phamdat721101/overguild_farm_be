@@ -1,8 +1,8 @@
-import { Module } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
-import { JwtModule } from '@nestjs/jwt';
-import { SeedController } from './seed.controller';
-import { SeedService } from './seed.service';
+import { Module } from "@nestjs/common";
+import { PrismaClient } from "@prisma/client";
+import { JwtModule } from "@nestjs/jwt";
+import { SeedController } from "./seed.controller";
+import { SeedService } from "./seed.service";
 
 @Module({
   imports: [JwtModule],

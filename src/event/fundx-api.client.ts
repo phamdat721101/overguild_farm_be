@@ -1,6 +1,6 @@
-import axios, { AxiosInstance } from 'axios';
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import axios, { AxiosInstance } from "axios";
+import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 
 export interface FundxEvent {
   id: string;
@@ -42,13 +42,15 @@ export class FundxApiClient {
   private readonly client: AxiosInstance;
 
   constructor(private readonly configService: ConfigService) {
-    const fundxApiUrl = this.configService.get<string>('FUNDX_API_URL') || 'http://localhost:4000';
-    
+    const fundxApiUrl =
+      this.configService.get<string>("FUNDX_API_URL") ||
+      "http://localhost:4000";
+
     this.client = axios.create({
       baseURL: fundxApiUrl,
       timeout: 5000,
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
     });
 
@@ -57,37 +59,45 @@ export class FundxApiClient {
 
   async getActiveEvents(): Promise<FundxEvent[]> {
     try {
-      const { data } = await this.client.get<FundxApiResponse<FundxEvent[]>>('/events');
-      
+      const { data } =
+        await this.client.get<FundxApiResponse<FundxEvent[]>>("/events");
+
       if (!data.is_success || !data.data) {
-        this.logger.warn('FundX API returned unsuccessful response');
+        this.logger.warn("FundX API returned unsuccessful response");
         return [];
       }
 
       // Filter only active/pending events
-      const activeEvents = data.data.filter(event => 
-        event.status === 'active' || event.status === 'pending'
+      const activeEvents = data.data.filter(
+        (event) => event.status === "active" || event.status === "pending",
       );
 
-      this.logger.log(`Fetched ${activeEvents.length} active events from FundX`);
+      this.logger.log(
+        `Fetched ${activeEvents.length} active events from FundX`,
+      );
       return activeEvents;
     } catch (error) {
-      this.logger.error('Failed to fetch events from FundX:', error.message);
+      this.logger.error("Failed to fetch events from FundX:", error.message);
       return []; // Return empty array if fundx is down
     }
   }
 
   async getEventById(eventId: string): Promise<FundxEvent | null> {
     try {
-      const { data } = await this.client.get<FundxApiResponse<FundxEvent>>(`/events/${eventId}`);
-      
+      const { data } = await this.client.get<FundxApiResponse<FundxEvent>>(
+        `/events/${eventId}`,
+      );
+
       if (!data.is_success || !data.data) {
         return null;
       }
 
       return data.data;
     } catch (error) {
-      this.logger.error(`Failed to fetch event ${eventId} from FundX:`, error.message);
+      this.logger.error(
+        `Failed to fetch event ${eventId} from FundX:`,
+        error.message,
+      );
       return null;
     }
   }
@@ -95,20 +105,21 @@ export class FundxApiClient {
   async createEvent(payload: CreateFundxEventPayload): Promise<FundxEvent> {
     try {
       const { data } = await this.client.post<FundxApiResponse<FundxEvent>>(
-        '/events',
+        "/events",
         payload,
       );
 
       if (!data.is_success || !data.data) {
-        throw new Error('FundX API returned unsuccessful response when creating event');
+        throw new Error(
+          "FundX API returned unsuccessful response when creating event",
+        );
       }
 
       this.logger.log(`Created event "${data.data.name}" in FundX`);
       return data.data;
     } catch (error: any) {
-      this.logger.error('Failed to create event in FundX:', error.message);
+      this.logger.error("Failed to create event in FundX:", error.message);
       throw error;
     }
   }
 }
-

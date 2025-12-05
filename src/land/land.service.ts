@@ -1,6 +1,11 @@
-import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
-import { AssignSeedDto } from './dto/assign-seed.dto';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+  Logger,
+} from "@nestjs/common";
+import { PrismaClient } from "@prisma/client";
+import { AssignSeedDto } from "./dto/assign-seed.dto";
 
 @Injectable()
 export class LandService {
@@ -21,20 +26,20 @@ export class LandService {
       include: {
         lands: {
           include: { plant: true },
-          orderBy: { plotIndex: 'asc' },
+          orderBy: { plotIndex: "asc" },
         },
       },
     });
 
     if (!user) {
-      throw new NotFoundException('User not found. Please register first.');
+      throw new NotFoundException("User not found. Please register first.");
     }
 
     // Return first land (plot 0) for backward compatibility
     const land = user.lands[0];
-    
+
     if (!land) {
-      throw new NotFoundException('No land found for this user');
+      throw new NotFoundException("No land found for this user");
     }
 
     // Transform to legacy format for backward compatibility
@@ -69,23 +74,25 @@ export class LandService {
       include: {
         lands: {
           include: { plant: true },
-          orderBy: { plotIndex: 'asc' },
+          orderBy: { plotIndex: "asc" },
           take: 1,
         },
       },
     });
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
     const land = user.lands[0];
     if (!land) {
-      throw new NotFoundException('No land found for this user');
+      throw new NotFoundException("No land found for this user");
     }
 
     if (land.plant) {
-      throw new BadRequestException('Land already has a plant. Harvest it first!');
+      throw new BadRequestException(
+        "Land already has a plant. Harvest it first!",
+      );
     }
 
     // Create plant using the new system
@@ -94,7 +101,7 @@ export class LandService {
       data: {
         landId: land.id,
         type: dto.seedType,
-        stage: 'DIGGING',
+        stage: "DIGGING",
         plantedAt: now,
         lastInteractedAt: now,
         diggingStartedAt: now,
@@ -115,7 +122,7 @@ export class LandService {
       plot_index: land.plotIndex,
       soil_quality: land.soilQuality,
       seed_type: plant.type,
-      growth_stage: 'seeded',
+      growth_stage: "seeded",
       growth_points: 0,
       task_status: {},
       planted_at: plant.plantedAt.toISOString(),
@@ -129,40 +136,40 @@ export class LandService {
   }
 
   private mapPlantStageToGrowthStage(stage?: string): string {
-    if (!stage) return 'empty';
-    
+    if (!stage) return "empty";
+
     const stageMap: Record<string, string> = {
-      'DIGGING': 'seeded',
-      'GROWING': 'sprout',
-      'MATURE': 'fruit',
-      'HARVESTED': 'harvested',
+      DIGGING: "seeded",
+      GROWING: "sprout",
+      MATURE: "fruit",
+      HARVESTED: "harvested",
     };
-    
-    return stageMap[stage] || 'empty';
+
+    return stageMap[stage] || "empty";
   }
 
   private getDiggingDuration(seedType: string): number {
     const durations: Record<string, number> = {
-      'ALGAE': 1,
-      'MUSHROOM': 10,
-      'TREE': 72,
-      'SOCIAL': 1,
-      'TECH': 1,
-      'CREATIVE': 1,
-      'BUSINESS': 1,
+      ALGAE: 1,
+      MUSHROOM: 10,
+      TREE: 72,
+      SOCIAL: 1,
+      TECH: 1,
+      CREATIVE: 1,
+      BUSINESS: 1,
     };
     return durations[seedType] || 1;
   }
 
   private getGrowingDuration(seedType: string): number {
     const durations: Record<string, number> = {
-      'ALGAE': 12,
-      'MUSHROOM': 72,
-      'TREE': 720,
-      'SOCIAL': 12,
-      'TECH': 12,
-      'CREATIVE': 12,
-      'BUSINESS': 12,
+      ALGAE: 12,
+      MUSHROOM: 72,
+      TREE: 720,
+      SOCIAL: 12,
+      TECH: 12,
+      CREATIVE: 12,
+      BUSINESS: 12,
     };
     return durations[seedType] || 12;
   }

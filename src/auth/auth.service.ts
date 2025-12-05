@@ -10,7 +10,10 @@ import { RegisterDto } from "./dto/register.dto";
 
 @Injectable()
 export class AuthService {
-  private nonces = new Map<string, { nonce: string; expiresAt: number; message: string }>();
+  private nonces = new Map<
+    string,
+    { nonce: string; expiresAt: number; message: string }
+  >();
 
   constructor(
     private readonly jwtService: JwtService,
@@ -91,13 +94,15 @@ export class AuthService {
         avatar: user.avatar,
         xp: user.xp,
         reputationScore: user.reputationScore,
+        gold: user.balanceGold,
+        ruby: user.balanceRuby,
         landsCount: user.lands.length,
         plantsCount: user.lands.filter((l) => l.plant !== null).length,
       },
     };
   }
 
-async login(dto: LoginDto) {
+  async login(dto: LoginDto) {
     const { walletAddress } = dto;
     const wallet = walletAddress.toLowerCase();
 
@@ -132,6 +137,8 @@ async login(dto: LoginDto) {
         avatar: user.avatar,
         xp: user.xp,
         reputationScore: user.reputationScore,
+        gold: user.balanceGold,
+        ruby: user.balanceRuby,
         landsCount: user.lands.length,
         plantsCount: user.lands.filter((l) => l.plant !== null).length,
       },

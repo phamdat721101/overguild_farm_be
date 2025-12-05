@@ -1,7 +1,7 @@
-import { Module } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
-import { ProgressionService } from './progression.service';
-import { ProgressionController } from './progression.controller';
+import { Module } from "@nestjs/common";
+import { PrismaClient } from "@prisma/client";
+import { ProgressionService } from "./progression.service";
+import { ProgressionController } from "./progression.controller";
 
 @Module({
   controllers: [ProgressionController],
@@ -9,5 +9,3 @@ import { ProgressionController } from './progression.controller';
   exports: [ProgressionService],
 })
 export class ProgressionModule {}
-
-

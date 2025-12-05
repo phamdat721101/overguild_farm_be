@@ -1,8 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 
 @Injectable()
 export class AppService {
   getStatus() {
-    return { message: 'Farm backend connected to Supabase' };
+    return { message: "Farm backend connected to Supabase" };
   }
 }

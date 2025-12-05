@@ -35,6 +35,8 @@ model User {
   seeds           Seed[]
   phygitalRedemptions PhygitalRedemption[]
   shopPurchases  ShopPurchase[]
+  dailyStreak    DailyStreak?
+  streakCheckins StreakCheckin[]
 
   @@map("users")
 }
@@ -214,4 +216,32 @@ model ShopPurchase {
 
   @@index([userId, shopType, itemKey, createdAt])
   @@map("shop_purchases")
+}
+
+model DailyStreak {
+  id            String    @id @default(dbgenerated("gen_random_uuid()"))
+  userId        String    @unique @map("user_id")
+  currentStreak Int       @default(0) @map("current_streak")
+  lastCheckinAt DateTime? @map("last_checkin_at")
+  totalCycles   Int       @default(0) @map("total_cycles")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([lastCheckinAt, currentStreak])
+  @@map("daily_streaks")
+}
+
+model StreakCheckin {
+  id        String   @id @default(dbgenerated("gen_random_uuid()"))
+  userId    String   @map("user_id")
+  streakDay Int      @map("streak_day")
+  rewards   Json     @map("rewards")
+  checkinAt DateTime @default(now()) @map("checkin_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, checkinAt])
+  @@map("streak_checkins")
 }

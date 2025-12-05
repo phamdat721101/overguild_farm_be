@@ -1,7 +1,7 @@
-import { Module } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
-import { SoulboundTokenController } from './soulbound-token.controller';
-import { SoulboundTokenService } from './soulbound-token.service';
+import { Module } from "@nestjs/common";
+import { PrismaClient } from "@prisma/client";
+import { SoulboundTokenController } from "./soulbound-token.controller";
+import { SoulboundTokenService } from "./soulbound-token.service";
 
 @Module({
   controllers: [SoulboundTokenController],
@@ -12,4 +12,3 @@ import { SoulboundTokenService } from './soulbound-token.service';
   exports: [SoulboundTokenService],
 })
 export class SoulboundTokenModule {}
-

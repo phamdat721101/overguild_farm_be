@@ -1,5 +1,10 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Logger,
+} from "@nestjs/common";
+import { PrismaClient } from "@prisma/client";
 
 @Injectable()
 export class FertilizerService {
@@ -48,20 +53,20 @@ export class FertilizerService {
         userId,
         itemType: {
           in: [
-            'FERTILIZER_COMMON',
-            'FERTILIZER_RARE',
-            'FERTILIZER_EPIC',
-            'FERTILIZER_LEGENDARY',
+            "FERTILIZER_COMMON",
+            "FERTILIZER_RARE",
+            "FERTILIZER_EPIC",
+            "FERTILIZER_LEGENDARY",
           ],
         },
       },
       orderBy: {
-        itemType: 'asc',
+        itemType: "asc",
       },
     });
 
     return {
-      fertilizers: fertilizers.map(f => ({
+      fertilizers: fertilizers.map((f) => ({
         type: f.itemType,
         amount: f.amount,
         rarity: this.getRarityFromType(f.itemType),
@@ -76,7 +81,11 @@ export class FertilizerService {
    * - Boosts plant growth (adds interactions)
    * - Improves soil quality
    */
-  async applyFertilizer(userId: string, landId: string, fertilizerType: string) {
+  async applyFertilizer(
+    userId: string,
+    landId: string,
+    fertilizerType: string,
+  ) {
     // Validate land ownership
     const land = await this.prisma.land.findFirst({
       where: { id: landId, userId },
@@ -84,19 +93,23 @@ export class FertilizerService {
     });
 
     if (!land) {
-      throw new NotFoundException('Land not found or does not belong to you');
+      throw new NotFoundException("Land not found or does not belong to you");
     }
 
     if (!land.plant) {
-      throw new BadRequestException('No plant on this land. Plant a seed first!');
+      throw new BadRequestException(
+        "No plant on this land. Plant a seed first!",
+      );
     }
 
-    if (land.plant.stage === 'DEAD') {
-      throw new BadRequestException('Cannot apply fertilizer to a dead plant');
+    if (land.plant.stage === "DEAD") {
+      throw new BadRequestException("Cannot apply fertilizer to a dead plant");
     }
 
-    if (land.plant.stage === 'FRUIT') {
-      throw new BadRequestException('Plant is ready to harvest! Apply fertilizer after harvesting.');
+    if (land.plant.stage === "FRUIT") {
+      throw new BadRequestException(
+        "Plant is ready to harvest! Apply fertilizer after harvesting.",
+      );
     }
 
     // Check fertilizer inventory
@@ -113,7 +126,7 @@ export class FertilizerService {
     // Get fertilizer effect
     const effect = this.FERTILIZER_EFFECTS[fertilizerType];
     if (!effect) {
-      throw new BadRequestException('Invalid fertilizer type');
+      throw new BadRequestException("Invalid fertilizer type");
     }
 
     // Consume fertilizer
@@ -124,12 +137,15 @@ export class FertilizerService {
 
     // Apply growth boost (add interactions)
     const newInteractions = land.plant.interactions + effect.growthBoost;
-    
+
     // Calculate new stage based on interactions
     const newStage = this.calculateStage(newInteractions);
 
     // Update soil quality
-    const currentSoil = (land.soilQuality as any) || { fertility: 50, hydration: 50 };
+    const currentSoil = (land.soilQuality as any) || {
+      fertility: 50,
+      hydration: 50,
+    };
     const newSoilQuality = {
       fertility: Math.min(100, currentSoil.fertility + effect.soilFertility),
       hydration: currentSoil.hydration,
@@ -155,7 +171,7 @@ export class FertilizerService {
 
     this.logger.log(
       `User ${userId} applied ${fertilizerType} to plant ${land.plant.id}. ` +
-      `Stage: ${land.plant.stage} → ${newStage}, Interactions: ${land.plant.interactions} → ${newInteractions}`
+        `Stage: ${land.plant.stage} → ${newStage}, Interactions: ${land.plant.interactions} → ${newInteractions}`,
     );
 
     return {
@@ -186,12 +202,14 @@ export class FertilizerService {
     // Check fruit inventory
     const fruits = await this.prisma.inventoryItem.findUnique({
       where: {
-        userId_itemType: { userId, itemType: 'FRUIT' },
+        userId_itemType: { userId, itemType: "FRUIT" },
       },
     });
 
     if (!fruits || fruits.amount < fruitAmount) {
-      throw new BadRequestException(`You don't have enough fruits. You have ${fruits?.amount || 0}, need ${fruitAmount}`);
+      throw new BadRequestException(
+        `You don't have enough fruits. You have ${fruits?.amount || 0}, need ${fruitAmount}`,
+      );
     }
 
     // Calculate fertilizer rewards based on composting rates
@@ -199,8 +217,9 @@ export class FertilizerService {
     const rewards: { type: string; amount: number }[] = [];
 
     // Try to create highest rarity first
-    const sortedRates = Object.entries(this.COMPOST_RATES)
-      .sort((a, b) => b[1] - a[1]); // Sort descending by fruit cost
+    const sortedRates = Object.entries(this.COMPOST_RATES).sort(
+      (a, b) => b[1] - a[1],
+    ); // Sort descending by fruit cost
 
     for (const [fertilizerType, fruitCost] of sortedRates) {
       if (remainingFruits >= fruitCost) {
@@ -212,7 +231,7 @@ export class FertilizerService {
 
     if (rewards.length === 0) {
       throw new BadRequestException(
-        `Not enough fruits to create fertilizer. Minimum: ${Math.min(...Object.values(this.COMPOST_RATES))} fruits`
+        `Not enough fruits to create fertilizer. Minimum: ${Math.min(...Object.values(this.COMPOST_RATES))} fruits`,
       );
     }
 
@@ -240,14 +259,14 @@ export class FertilizerService {
     }
 
     this.logger.log(
-      `User ${userId} composted ${fruitAmount} fruits, received: ${rewards.map(r => `${r.amount}x ${r.type}`).join(', ')}`
+      `User ${userId} composted ${fruitAmount} fruits, received: ${rewards.map((r) => `${r.amount}x ${r.type}`).join(", ")}`,
     );
 
     return {
       success: true,
       fruitsConsumed: fruitAmount,
       fertilizersCreated: rewards,
-      message: `🔥 Composted ${fruitAmount} fruits! Created: ${rewards.map(r => `${r.amount}x ${r.type}`).join(', ')}`,
+      message: `🔥 Composted ${fruitAmount} fruits! Created: ${rewards.map((r) => `${r.amount}x ${r.type}`).join(", ")}`,
     };
   }
 
@@ -255,20 +274,19 @@ export class FertilizerService {
    * Calculate plant stage based on interactions
    */
   private calculateStage(interactions: number): string {
-    if (interactions >= 15) return 'FRUIT';
-    if (interactions >= 8) return 'BLOOM';
-    if (interactions >= 3) return 'SPROUT';
-    return 'SEED';
+    if (interactions >= 15) return "FRUIT";
+    if (interactions >= 8) return "BLOOM";
+    if (interactions >= 3) return "SPROUT";
+    return "SEED";
   }
 
   /**
    * Get rarity from fertilizer type
    */
   private getRarityFromType(type: string): string {
-    if (type.includes('LEGENDARY')) return 'LEGENDARY';
-    if (type.includes('EPIC')) return 'EPIC';
-    if (type.includes('RARE')) return 'RARE';
-    return 'COMMON';
+    if (type.includes("LEGENDARY")) return "LEGENDARY";
+    if (type.includes("EPIC")) return "EPIC";
+    if (type.includes("RARE")) return "RARE";
+    return "COMMON";
   }
 }
-

@@ -99,12 +99,12 @@ export class InventoryController {
   })
   async getInventory(
     @CurrentUser("sub") userId: string,
-    @Query() query: QueryInventoryDto
+    @Query() query: QueryInventoryDto,
   ) {
     return this.inventoryService.getInventory(
       userId,
       query.category,
-      query.search
+      query.search,
     );
   }
 
@@ -154,7 +154,7 @@ export class InventoryController {
   @ApiResponse({ status: 400, description: "Not enough items" })
   async removeItem(
     @CurrentUser("sub") userId: string,
-    @Body() dto: RemoveItemDto
+    @Body() dto: RemoveItemDto,
   ) {
     return this.inventoryService.removeItem(userId, dto);
   }
@@ -190,7 +190,7 @@ export class InventoryController {
   @ApiResponse({ status: 404, description: "Recipient not found" })
   async transferItem(
     @CurrentUser("sub") userId: string,
-    @Body() dto: TransferItemDto
+    @Body() dto: TransferItemDto,
   ) {
     return this.inventoryService.transferItem(userId, dto);
   }
@@ -215,12 +215,12 @@ export class InventoryController {
   async checkItem(
     @CurrentUser("sub") userId: string,
     @Param("itemType") itemType: string,
-    @Param("amount") amount: string
+    @Param("amount") amount: string,
   ) {
     const hasEnough = await this.inventoryService.hasItem(
       userId,
       itemType,
-      parseInt(amount)
+      parseInt(amount),
     );
     return {
       itemType,

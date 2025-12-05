@@ -1,5 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from "@nestjs/common";
+import { PrismaClient } from "@prisma/client";
 
 @Injectable()
 export class SeedService {
@@ -14,17 +18,17 @@ export class SeedService {
       where: {
         userId,
         itemType: {
-          startsWith: 'SEED_',
+          startsWith: "SEED_",
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
 
     // Transform to match old format for backward compatibility
-    return seedItems.map(item => ({
+    return seedItems.map((item) => ({
       id: item.id,
       userId: item.userId,
-      type: item.itemType.replace('SEED_', ''), // SEED_COMMON -> COMMON
+      type: item.itemType.replace("SEED_", ""), // SEED_COMMON -> COMMON
       rarity: this.getRarityFromType(item.itemType),
       quantity: item.amount,
       createdAt: item.createdAt,
@@ -36,9 +40,9 @@ export class SeedService {
    * Add seed to inventory_items
    * @param type - Seed type (e.g., 'COMMON', 'RARE') - will be stored as 'SEED_COMMON'
    */
-  async addSeed(userId: string, type: string, rarity: string = 'COMMON') {
+  async addSeed(userId: string, type: string, rarity: string = "COMMON") {
     const itemType = `SEED_${type.toUpperCase()}`;
-    
+
     return this.prisma.inventoryItem.upsert({
       where: {
         userId_itemType: { userId, itemType },
@@ -51,8 +55,8 @@ export class SeedService {
       update: {
         amount: { increment: 1 },
       },
-      });
-    }
+    });
+  }
 
   /**
    * Consume seed from inventory_items
@@ -60,7 +64,7 @@ export class SeedService {
    */
   async consumeSeed(userId: string, type: string) {
     const itemType = `SEED_${type.toUpperCase()}`;
-    
+
     const seedItem = await this.prisma.inventoryItem.findUnique({
       where: {
         userId_itemType: { userId, itemType },
@@ -86,12 +90,17 @@ export class SeedService {
    * Craft MUSHROOM seed from 5 ALGAE fruits
    */
   async craftMushroom(userId: string) {
+    // Check if user has 5 ALGAE fruits
     const algaeFruit = await this.prisma.inventoryItem.findUnique({
-      where: { userId_itemType: { userId, itemType: 'FRUIT_ALGAE' } },
+      where: {
+        userId_itemType: { userId, itemType: "FRUIT_ALGAE" },
+      },
     });
 
     if (!algaeFruit || algaeFruit.amount < 5) {
-      throw new BadRequestException('You need 5 ALGAE fruits to craft MUSHROOM seed');
+      throw new BadRequestException(
+        "You need 5 ALGAE fruits to craft MUSHROOM seed",
+      );
     }
 
     // Consume 5 ALGAE fruits
@@ -100,18 +109,13 @@ export class SeedService {
       data: { amount: { decrement: 5 } },
     });
 
-    // Add MUSHROOM seed to inventory
-    await this.prisma.inventoryItem.upsert({
-      where: { userId_itemType: { userId, itemType: 'SEED_MUSHROOM' } },
-      create: { userId, itemType: 'SEED_MUSHROOM', amount: 1 },
-      update: { amount: { increment: 1 } },
-    });
+    // Add MUSHROOM seed
+    const seed = await this.addSeed(userId, "MUSHROOM", "COMMON");
 
     return {
       success: true,
-      message: '🍄 Crafted 1 MUSHROOM seed from 5 ALGAE fruits!',
-      cost: { FRUIT_ALGAE: 5 },
-      received: { SEED_MUSHROOM: 1 },
+      seed,
+      message: "🍄 Crafted 1 MUSHROOM seed from 5 ALGAE fruits!",
     };
   }
 
@@ -119,9 +123,9 @@ export class SeedService {
    * Get rarity from seed item type
    */
   private getRarityFromType(itemType: string): string {
-    if (itemType.includes('LEGENDARY')) return 'LEGENDARY';
-    if (itemType.includes('EPIC')) return 'EPIC';
-    if (itemType.includes('RARE')) return 'RARE';
-    return 'COMMON';
+    if (itemType.includes("LEGENDARY")) return "LEGENDARY";
+    if (itemType.includes("EPIC")) return "EPIC";
+    if (itemType.includes("RARE")) return "RARE";
+    return "COMMON";
   }
 }

@@ -1,4 +1,4 @@
-import { LandGrowthStage } from '../enums/growth-stage.enum';
+import { LandGrowthStage } from "../enums/growth-stage.enum";
 
 export interface LandEntity {
   id?: string;

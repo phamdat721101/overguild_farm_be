@@ -1,4 +1,4 @@
-import { LandGrowthStage } from '../land/enums/growth-stage.enum';
+import { LandGrowthStage } from "../land/enums/growth-stage.enum";
 
 export interface Database {
   public: {

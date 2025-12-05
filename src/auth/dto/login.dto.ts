@@ -28,4 +28,3 @@ export class LoginDto {
   })
   walletAddress: string;
 }
-

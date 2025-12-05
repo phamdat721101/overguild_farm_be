@@ -1,11 +1,11 @@
-import { Module, forwardRef } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
-import { JwtModule } from '@nestjs/jwt';
-import { PlantController } from './plant.controller';
-import { PlantService } from './plant.service';
-import { SeedModule } from '../seed/seed.module';
-import { MissionModule } from '../mission/mission.module';
-import { SoulboundTokenModule } from '../soulbound-token/soulbound-token.module';
+import { Module, forwardRef } from "@nestjs/common";
+import { PrismaClient } from "@prisma/client";
+import { JwtModule } from "@nestjs/jwt";
+import { PlantController } from "./plant.controller";
+import { PlantService } from "./plant.service";
+import { SeedModule } from "../seed/seed.module";
+import { MissionModule } from "../mission/mission.module";
+import { SoulboundTokenModule } from "../soulbound-token/soulbound-token.module";
 
 @Module({
   imports: [

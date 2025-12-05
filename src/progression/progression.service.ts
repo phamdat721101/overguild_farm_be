@@ -1,5 +1,5 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { Injectable, BadRequestException } from "@nestjs/common";
+import { PrismaClient } from "@prisma/client";
 
 // Internal config types for rewards
 interface LevelRewardItem {
@@ -22,15 +22,43 @@ export class ProgressionService {
   private readonly LEVEL_CONFIGS: LevelConfig[] = [
     { level: 1, requiredXp: 0, rewards: {} },
     // Để dễ test MVP, level 2 yêu cầu 20 XP (có thể đạt được bằng cách claim 1 daily mission)
-    { level: 2, requiredXp: 20, rewards: { items: [{ type: 'SEED_COMMON', amount: 1 }] } },
-    { level: 3, requiredXp: 250, rewards: { items: [{ type: 'FERTILIZER_BASIC', amount: 1 }] } },
-    { level: 4, requiredXp: 500, rewards: { items: [{ type: 'SEED_RARE', amount: 1 }] } },
-    { level: 5, requiredXp: 800, rewards: { items: [{ type: 'FERTILIZER_PRO', amount: 1 }] } },
+    {
+      level: 2,
+      requiredXp: 20,
+      rewards: { items: [{ type: "SEED_COMMON", amount: 1 }] },
+    },
+    {
+      level: 3,
+      requiredXp: 250,
+      rewards: { items: [{ type: "FERTILIZER_BASIC", amount: 1 }] },
+    },
+    {
+      level: 4,
+      requiredXp: 500,
+      rewards: { items: [{ type: "SEED_RARE", amount: 1 }] },
+    },
+    {
+      level: 5,
+      requiredXp: 800,
+      rewards: { items: [{ type: "FERTILIZER_PRO", amount: 1 }] },
+    },
     { level: 6, requiredXp: 1200, rewards: {} },
-    { level: 7, requiredXp: 1700, rewards: { items: [{ type: 'SEED_EPIC', amount: 1 }] } },
+    {
+      level: 7,
+      requiredXp: 1700,
+      rewards: { items: [{ type: "SEED_EPIC", amount: 1 }] },
+    },
     { level: 8, requiredXp: 2300, rewards: {} },
-    { level: 9, requiredXp: 3000, rewards: { items: [{ type: 'FERTILIZER_ELITE', amount: 1 }] } },
-    { level: 10, requiredXp: 3800, rewards: { items: [{ type: 'SEED_LEGENDARY', amount: 1 }] } },
+    {
+      level: 9,
+      requiredXp: 3000,
+      rewards: { items: [{ type: "FERTILIZER_ELITE", amount: 1 }] },
+    },
+    {
+      level: 10,
+      requiredXp: 3800,
+      rewards: { items: [{ type: "SEED_LEGENDARY", amount: 1 }] },
+    },
   ];
 
   constructor(private readonly prisma: PrismaClient) {}
@@ -59,7 +87,7 @@ export class ProgressionService {
     });
 
     if (!user) {
-      throw new BadRequestException('User not found');
+      throw new BadRequestException("User not found");
     }
 
     const currentLevelConfig = this.getCurrentLevelFromXp(user.xp);
@@ -67,8 +95,9 @@ export class ProgressionService {
 
     // Tìm next level config (level cao hơn đầu tiên)
     const nextLevelConfig =
-      this.LEVEL_CONFIGS.find((cfg) => cfg.requiredXp > currentLevelConfig.requiredXp) ??
-      maxConfig;
+      this.LEVEL_CONFIGS.find(
+        (cfg) => cfg.requiredXp > currentLevelConfig.requiredXp,
+      ) ?? maxConfig;
 
     const nextLevelXp = nextLevelConfig.requiredXp;
     const xpToNextLevel = Math.max(0, nextLevelXp - user.xp);
@@ -92,7 +121,7 @@ export class ProgressionService {
   async claimLevelReward(userId: string, level: number): Promise<any> {
     const levelConfig = this.getLevelConfig(level);
     if (!levelConfig) {
-      throw new BadRequestException('Invalid level');
+      throw new BadRequestException("Invalid level");
     }
 
     const user = await this.prisma.user.findUnique({
@@ -101,11 +130,11 @@ export class ProgressionService {
     });
 
     if (!user) {
-      throw new BadRequestException('User not found');
+      throw new BadRequestException("User not found");
     }
 
     if (user.xp < levelConfig.requiredXp) {
-      throw new BadRequestException('Not enough XP to claim this level reward');
+      throw new BadRequestException("Not enough XP to claim this level reward");
     }
 
     // Áp dụng phần thưởng items (nếu có)
@@ -132,5 +161,3 @@ export class ProgressionService {
     return this.getUserProgress(userId);
   }
 }
-
-

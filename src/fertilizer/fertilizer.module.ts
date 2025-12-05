@@ -1,7 +1,7 @@
-import { Module } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
-import { FertilizerController } from './fertilizer.controller';
-import { FertilizerService } from './fertilizer.service';
+import { Module } from "@nestjs/common";
+import { PrismaClient } from "@prisma/client";
+import { FertilizerController } from "./fertilizer.controller";
+import { FertilizerService } from "./fertilizer.service";
 
 @Module({
   controllers: [FertilizerController],
@@ -12,4 +12,3 @@ import { FertilizerService } from './fertilizer.service';
   exports: [FertilizerService],
 })
 export class FertilizerModule {}
-

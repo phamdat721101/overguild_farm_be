@@ -1,8 +1,8 @@
-import { Module, forwardRef } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
-import { MissionController } from './mission.controller';
-import { MissionService } from './mission.service';
-import { SoulboundTokenModule } from '../soulbound-token/soulbound-token.module';
+import { Module, forwardRef } from "@nestjs/common";
+import { PrismaClient } from "@prisma/client";
+import { MissionController } from "./mission.controller";
+import { MissionService } from "./mission.service";
+import { SoulboundTokenModule } from "../soulbound-token/soulbound-token.module";
 
 @Module({
   imports: [forwardRef(() => SoulboundTokenModule)],
@@ -11,4 +11,3 @@ import { SoulboundTokenModule } from '../soulbound-token/soulbound-token.module'
   exports: [MissionService],
 })
 export class MissionModule {}
-

@@ -15,6 +15,9 @@ import { FertilizerModule } from "./fertilizer/fertilizer.module";
 import { SoulboundTokenModule } from "./soulbound-token/soulbound-token.module";
 import { ProgressionModule } from "./progression/progression.module";
 import { InventoryModule } from "./inventory/inventory.module";
+import { PhygitalModule } from "./phygital/phygital.module";
+import { ShopModule } from "./shop/shop.module";
+import { StreakModule } from "./streak/streak.module";
 
 @Module({
   imports: [
@@ -32,6 +35,9 @@ import { InventoryModule } from "./inventory/inventory.module";
     SoulboundTokenModule,
     ProgressionModule,
     InventoryModule,
+    PhygitalModule,
+    ShopModule,
+    StreakModule,
   ],
   controllers: [AppController],
   providers: [AppService],
