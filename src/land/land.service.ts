@@ -64,11 +64,11 @@ export class LandService {
 
   /**
    * Assign seed to land (legacy endpoint - prefer using POST /plant/plant instead)
+   * @deprecated Use POST /plant/plant for new features
    */
   async assignSeed(dto: AssignSeedDto) {
     const wallet = dto.walletAddress.toLowerCase();
 
-    // Find user and their first land
     const user = await this.prisma.user.findUnique({
       where: { walletAddress: wallet },
       include: {
@@ -95,7 +95,14 @@ export class LandService {
       );
     }
 
-    // Create plant using the new system
+    // ✅ Only allow new plant types
+    const allowedTypes = ["ALGAE", "MUSHROOM", "TREE"];
+    if (!allowedTypes.includes(dto.seedType)) {
+      throw new BadRequestException(
+        `Invalid seed type. Must be one of: ${allowedTypes.join(", ")}`
+      );
+    }
+
     const now = new Date();
     const plant = await this.prisma.plant.create({
       data: {
@@ -115,7 +122,6 @@ export class LandService {
       },
     });
 
-    // Return in legacy format
     return {
       id: land.id,
       wallet_address: user.walletAddress,
@@ -153,10 +159,6 @@ export class LandService {
       ALGAE: 1,
       MUSHROOM: 10,
       TREE: 72,
-      SOCIAL: 1,
-      TECH: 1,
-      CREATIVE: 1,
-      BUSINESS: 1,
     };
     return durations[seedType] || 1;
   }
@@ -166,10 +168,6 @@ export class LandService {
       ALGAE: 12,
       MUSHROOM: 72,
       TREE: 720,
-      SOCIAL: 12,
-      TECH: 12,
-      CREATIVE: 12,
-      BUSINESS: 12,
     };
     return durations[seedType] || 12;
   }

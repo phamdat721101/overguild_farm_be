@@ -12,13 +12,11 @@ import { SeedService } from "../seed/seed.service";
 export class PlantService {
   private readonly logger = new Logger(PlantService.name);
 
-  // Plant type configurations based on the image + legacy types
+  // Plant type configurations (removed bucketRequired field)
   private readonly PLANT_CONFIGS = {
-    // New growth cycle plants (from image)
     ALGAE: {
       name: "Tảo",
       source: "Shop/Starter",
-      bucketRequired: 1,
       diggingHours: 1,
       growingHours: 12,
       totalHours: 13,
@@ -27,7 +25,6 @@ export class PlantService {
     MUSHROOM: {
       name: "Nấm",
       source: "Craft (5 Tảo)",
-      bucketRequired: 1,
       diggingHours: 10,
       growingHours: 72,
       totalHours: 82,
@@ -37,49 +34,10 @@ export class PlantService {
     TREE: {
       name: "Cây",
       source: "NFT Seed",
-      bucketRequired: 1,
       diggingHours: 72, // 3 days
       growingHours: 720, // 30 days
       totalHours: 792, // ~33 days
       baseYield: 10,
-    },
-
-    // Legacy plant types (for backward compatibility with existing data)
-    SOCIAL: {
-      name: "Social Plant",
-      source: "Starter",
-      bucketRequired: 1,
-      diggingHours: 1,
-      growingHours: 12,
-      totalHours: 13,
-      baseYield: 3,
-    },
-    TECH: {
-      name: "Tech Plant",
-      source: "Starter",
-      bucketRequired: 1,
-      diggingHours: 1,
-      growingHours: 12,
-      totalHours: 13,
-      baseYield: 3,
-    },
-    CREATIVE: {
-      name: "Creative Plant",
-      source: "Starter",
-      bucketRequired: 1,
-      diggingHours: 1,
-      growingHours: 12,
-      totalHours: 13,
-      baseYield: 3,
-    },
-    BUSINESS: {
-      name: "Business Plant",
-      source: "Starter",
-      bucketRequired: 1,
-      diggingHours: 1,
-      growingHours: 12,
-      totalHours: 13,
-      baseYield: 3,
     },
   };
 
@@ -90,13 +48,14 @@ export class PlantService {
 
   /**
    * Plant a seed - starts DIGGING phase
+   * ✅ Simplified: No bucket required
    */
   async plantSeed(userId: string, landId: string, seedType: string) {
     // Validate plant type
     const config = this.PLANT_CONFIGS[seedType];
     if (!config) {
       throw new BadRequestException(
-        `Invalid seed type. Must be: ALGAE, MUSHROOM, or TREE`,
+        `Invalid seed type. Must be one of: ALGAE, MUSHROOM, TREE`,
       );
     }
 
@@ -116,26 +75,7 @@ export class PlantService {
       );
     }
 
-    // Check bucket in inventory
-    const bucket = await this.prisma.inventoryItem.findUnique({
-      where: {
-        userId_itemType: { userId, itemType: "BUCKET" },
-      },
-    });
-
-    if (!bucket || bucket.amount < config.bucketRequired) {
-      throw new BadRequestException(
-        `You need ${config.bucketRequired} bucket(s) to plant ${config.name}`,
-      );
-    }
-
-    // Consume bucket
-    await this.prisma.inventoryItem.update({
-      where: { id: bucket.id },
-      data: { amount: { decrement: config.bucketRequired } },
-    });
-
-    // Consume seed
+    // Consume seed from inventory
     await this.seedService.consumeSeed(userId, seedType);
 
     // Create plant in DIGGING phase
@@ -168,7 +108,7 @@ export class PlantService {
       diggingTime: `${config.diggingHours}h`,
       growingTime: `${config.growingHours}h`,
       totalTime: `${config.totalHours}h`,
-      note: "⚠️ Digging time cannot be shortened by potions",
+      note: "Water the plant during GROWING phase to speed up growth",
     };
   }
 
@@ -410,7 +350,6 @@ export class PlantService {
       const config = this.PLANT_CONFIGS[plant.type] || {
         name: plant.type,
         source: "Unknown",
-        bucketRequired: 1,
         diggingHours: 1,
         growingHours: 12,
         totalHours: 13,
@@ -499,5 +438,180 @@ export class PlantService {
 
     if (days > 0) return `${days}d ${hours % 24}h`;
     return `${hours}h`;
+  }
+
+  /**
+   * Get single land info by ID
+   */
+  async getLandById(landId: string, userId: string) {
+    const land = await this.prisma.land.findFirst({
+      where: { id: landId, userId },
+      include: { plant: true },
+    });
+
+    if (!land) {
+      throw new NotFoundException("Land not found or does not belong to you");
+    }
+
+    const soilQuality = (land.soilQuality as any) || { fertility: 50, hydration: 50 };
+
+    return {
+      id: land.id,
+      plotIndex: land.plotIndex,
+      userId: land.userId,
+      soilQuality,
+      plant: land.plant ? {
+        id: land.plant.id,
+        type: land.plant.type,
+        stage: land.plant.stage,
+        plantedAt: land.plant.plantedAt,
+        interactions: land.plant.interactions,
+        waterCount: land.plant.waterCount,
+        isHarvestable: land.plant.isHarvestable,
+      } : null,
+      createdAt: land.createdAt,
+      updatedAt: land.updatedAt,
+    };
+  }
+
+  /**
+   * Add new land to user's garden
+   * Cost: 1000 gold per additional land (plot 1+)
+   */
+  async addLand(userId: string) {
+    // Get current land count
+    const existingLands = await this.prisma.land.findMany({
+      where: { userId },
+      orderBy: { plotIndex: 'desc' },
+    });
+
+    const nextPlotIndex = existingLands.length;
+
+    // First land (plot 0) is free, additional lands cost 1000 gold
+    if (nextPlotIndex > 0) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { balanceGold: true },
+      });
+
+      const landCost = 1000;
+
+      if (!user || user.balanceGold < landCost) {
+        throw new BadRequestException(
+          `Not enough gold! Need ${landCost} gold to buy land ${nextPlotIndex + 1}. Current balance: ${user?.balanceGold || 0}`
+        );
+      }
+
+      // Deduct gold
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { balanceGold: { decrement: landCost } },
+      });
+
+      this.logger.log(`User ${userId} purchased land plot ${nextPlotIndex} for ${landCost} gold`);
+    }
+
+    // Create new land
+    const newLand = await this.prisma.land.create({
+      data: {
+        userId,
+        plotIndex: nextPlotIndex,
+        soilQuality: { fertility: 50, hydration: 50 },
+      },
+    });
+
+    return {
+      success: true,
+      land: {
+        id: newLand.id,
+        plotIndex: newLand.plotIndex,
+        soilQuality: newLand.soilQuality,
+      },
+      cost: nextPlotIndex > 0 ? 1000 : 0,
+      message: nextPlotIndex === 0 
+        ? '🎉 Welcome! Your first land is free!' 
+        : `🏞️ Purchased land plot ${nextPlotIndex + 1} for 1000 gold!`,
+    };
+  }
+
+  /**
+   * Remove plant from land (clear land)
+   * Useful when plant is dead or user wants to start fresh
+   */
+  async clearLand(landId: string, userId: string) {
+    const land = await this.prisma.land.findFirst({
+      where: { id: landId, userId },
+      include: { plant: true },
+    });
+
+    if (!land) {
+      throw new NotFoundException("Land not found or does not belong to you");
+    }
+
+    if (!land.plant) {
+      throw new BadRequestException("This land is already empty");
+    }
+
+    const plantType = land.plant.type;
+    const plantStage = land.plant.stage;
+
+    // Delete plant
+    await this.prisma.plant.delete({
+      where: { id: land.plant.id },
+    });
+
+    this.logger.log(`User ${userId} cleared land ${landId}, removed ${plantStage} ${plantType} plant`);
+
+    return {
+      success: true,
+      land: {
+        id: land.id,
+        plotIndex: land.plotIndex,
+        plant: null,
+      },
+      removedPlant: {
+        type: plantType,
+        stage: plantStage,
+      },
+      message: `🗑️ Cleared land! Removed ${plantStage} ${plantType} plant. Land is now ready for new planting.`,
+    };
+  }
+
+  /**
+   * Get all user lands with summary
+   */
+  async getUserLands(userId: string) {
+    const lands = await this.prisma.land.findMany({
+      where: { userId },
+      include: { plant: true },
+      orderBy: { plotIndex: 'asc' },
+    });
+
+    const summary = {
+      totalLands: lands.length,
+      emptyLands: lands.filter(l => !l.plant).length,
+      occupiedLands: lands.filter(l => l.plant).length,
+      plantsByStage: lands.reduce((acc, l) => {
+        if (l.plant) {
+          acc[l.plant.stage] = (acc[l.plant.stage] || 0) + 1;
+        }
+        return acc;
+      }, {} as Record<string, number>),
+    };
+
+    return {
+      lands: lands.map(land => ({
+        id: land.id,
+        plotIndex: land.plotIndex,
+        soilQuality: land.soilQuality,
+        plant: land.plant ? {
+          id: land.plant.id,
+          type: land.plant.type,
+          stage: land.plant.stage,
+          interactions: land.plant.interactions,
+        } : null,
+      })),
+      summary,
+    };
   }
 }

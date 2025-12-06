@@ -6,6 +6,7 @@ import {
   Param,
   Body,
   UseGuards,
+  Delete,
 } from "@nestjs/common";
 import {
   ApiTags,
@@ -43,11 +44,27 @@ export class PlantController {
   @ApiOperation({
     summary: "Plant a seed on a land plot",
     description:
-      "Consumes a seed from inventory and creates a plant on the specified land",
+      "Plant a seed to start growing. Only requires seed in inventory. Seed types: ALGAE (13h total), MUSHROOM (82h total), TREE (792h total)",
   })
   @ApiResponse({
     status: 200,
     description: "Plant created successfully",
+    schema: {
+      example: {
+        plant: {
+          id: "plant-uuid",
+          type: "ALGAE",
+          stage: "DIGGING",
+          plantedAt: "2025-12-03T10:00:00.000Z",
+        },
+        message: "🌱 Successfully planted Tảo! Digging phase: 1 hours",
+        phase: "DIGGING",
+        diggingTime: "1h",
+        growingTime: "12h",
+        totalTime: "13h",
+        note: "Water the plant during GROWING phase to speed up growth",
+      },
+    },
   })
   @ApiResponse({
     status: 400,
@@ -107,5 +124,157 @@ export class PlantController {
     @Body() dto: InteractPlantDto,
   ) {
     return this.plantService.interactPlant(plantId, userId, dto.action);
+  }
+
+  @Get("lands")
+  @ApiOperation({
+    summary: "Get all user lands with summary",
+    description: "View all lands owned by user with occupancy summary",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "List of all user lands",
+    schema: {
+      example: {
+        lands: [
+          {
+            id: "land-uuid-1",
+            plotIndex: 0,
+            soilQuality: { fertility: 50, hydration: 50 },
+            plant: {
+              id: "plant-uuid",
+              type: "ALGAE",
+              stage: "GROWING",
+              interactions: 5,
+            },
+          },
+          {
+            id: "land-uuid-2",
+            plotIndex: 1,
+            soilQuality: { fertility: 50, hydration: 50 },
+            plant: null,
+          },
+        ],
+        summary: {
+          totalLands: 2,
+          emptyLands: 1,
+          occupiedLands: 1,
+          plantsByStage: { GROWING: 1 },
+        },
+      },
+    },
+  })
+  getUserLands(@CurrentUser("sub") userId: string) {
+    return this.plantService.getUserLands(userId);
+  }
+
+  @Get("land/:landId")
+  @ApiOperation({
+    summary: "Get single land info by ID",
+    description: "Get detailed information about a specific land",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Land details",
+    schema: {
+      example: {
+        id: "land-uuid",
+        plotIndex: 0,
+        userId: "user-uuid",
+        soilQuality: { fertility: 50, hydration: 50 },
+        plant: {
+          id: "plant-uuid",
+          type: "ALGAE",
+          stage: "GROWING",
+          plantedAt: "2025-12-03T10:00:00.000Z",
+          interactions: 5,
+          waterCount: 3,
+          isHarvestable: false,
+        },
+        createdAt: "2025-11-30T10:00:00.000Z",
+        updatedAt: "2025-12-03T10:00:00.000Z",
+      },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    description: "Land not found or does not belong to user",
+  })
+  getLandById(
+    @Param("landId") landId: string,
+    @CurrentUser("sub") userId: string,
+  ) {
+    return this.plantService.getLandById(landId, userId);
+  }
+
+  @Post("land/add")
+  @ApiOperation({
+    summary: "Add new land to garden",
+    description:
+      "Purchase additional land plot. First land (plot 0) is free. Additional lands cost 1000 gold each.",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "New land added successfully",
+    schema: {
+      example: {
+        success: true,
+        land: {
+          id: "new-land-uuid",
+          plotIndex: 1,
+          soilQuality: { fertility: 50, hydration: 50 },
+        },
+        cost: 1000,
+        message: "🏞️ Purchased land plot 2 for 1000 gold!",
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Not enough gold to purchase land",
+  })
+  addLand(@CurrentUser("sub") userId: string) {
+    return this.plantService.addLand(userId);
+  }
+
+  @Delete("land/:landId/clear")
+  @ApiOperation({
+    summary: "Clear land (remove plant)",
+    description:
+      "Remove plant from land to start fresh. Useful for dead plants or when you want to replant. Warning: This destroys the plant without harvest!",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Land cleared successfully",
+    schema: {
+      example: {
+        success: true,
+        land: {
+          id: "land-uuid",
+          plotIndex: 0,
+          plant: null,
+        },
+        removedPlant: {
+          type: "ALGAE",
+          stage: "SEED",
+        },
+        message:
+          "🗑️ Cleared land! Removed SEED ALGAE plant. Land is now ready for new planting.",
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Land is already empty",
+  })
+  @ApiResponse({
+    status: 404,
+    description: "Land not found or does not belong to user",
+  })
+  clearLand(
+    @Param("landId") landId: string,
+    @CurrentUser("sub") userId: string,
+  ) {
+    return this.plantService.clearLand(landId, userId);
   }
 }

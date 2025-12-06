@@ -2,16 +2,21 @@ import { IsString, IsEnum, IsNotEmpty } from "class-validator";
 import { ApiProperty } from "@nestjs/swagger";
 
 export class PlantSeedDto {
-  @ApiProperty({ example: "land-uuid-123" })
+  @ApiProperty({ 
+    example: "land-uuid-123",
+    description: "Land ID where to plant the seed"
+  })
   @IsString()
   @IsNotEmpty()
   landId: string;
 
   @ApiProperty({
-    example: "SOCIAL",
-    enum: ["SOCIAL", "TECH", "CREATIVE", "BUSINESS"],
+    example: "ALGAE",
+    enum: ["ALGAE", "MUSHROOM", "TREE"],
+    description: "Seed type to plant. ALGAE (13h), MUSHROOM (82h), TREE (792h)"
   })
-  @IsEnum(["SOCIAL", "TECH", "CREATIVE", "BUSINESS"])
+  @IsEnum(["ALGAE", "MUSHROOM", "TREE"])
+  @IsNotEmpty()
   seedType: string;
 }
 

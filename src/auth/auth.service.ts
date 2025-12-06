@@ -2,18 +2,16 @@ import {
   Injectable,
   ConflictException,
   NotFoundException,
+  Logger,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { PrismaClient } from "@prisma/client";
-import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
+import { LoginDto } from "./dto/login.dto";
 
 @Injectable()
 export class AuthService {
-  private nonces = new Map<
-    string,
-    { nonce: string; expiresAt: number; message: string }
-  >();
+  private readonly logger = new Logger(AuthService.name);
 
   constructor(
     private readonly jwtService: JwtService,
@@ -24,7 +22,7 @@ export class AuthService {
     const { walletAddress, username } = dto;
     const wallet = walletAddress.toLowerCase();
 
-    // Kiểm tra user đã tồn tại chưa
+    // Check if user already exists
     const existingUser = await this.prisma.user.findUnique({
       where: { walletAddress: wallet },
     });
@@ -35,7 +33,7 @@ export class AuthService {
       );
     }
 
-    // Kiểm tra username đã tồn tại chưa (nếu có)
+    // Check if username is taken (if provided)
     if (username) {
       const existingUsername = await this.prisma.user.findFirst({
         where: { username },
@@ -46,29 +44,22 @@ export class AuthService {
       }
     }
 
-    // Tạo user mới với 1 Land + 1 Plant starter
+    // ✅ Create user with 1 empty land (no plant)
     const user = await this.prisma.user.create({
       data: {
         walletAddress: wallet,
-        network: "multi-chain",
         username: username || null,
+        xp: 0,
+        reputationScore: 0,
+        balanceGold: 0,
+        balanceRuby: 0,
         avatar: null,
-        // Tạo 1 mảnh đất (plot 0) với 1 cây starter (SEED)
+        // ✅ Create 1 empty land (plot 0) - no plant
         lands: {
           create: {
             plotIndex: 0,
             soilQuality: { fertility: 50, hydration: 50 },
-            plant: {
-              create: {
-                type: "SOCIAL",
-                stage: "SEED",
-                lastInteractedAt: new Date(),
-                plantedAt: new Date(),
-                interactions: 0,
-                githubCommits: 0,
-                isGoldBranch: false,
-              },
-            },
+            // ✅ No plant created - land is empty
           },
         },
       },
@@ -80,6 +71,8 @@ export class AuthService {
         },
       },
     });
+
+    this.logger.log(`New user registered: ${user.id} (${wallet})`);
 
     const payload = { sub: user.id, walletAddress: user.walletAddress };
     const accessToken = await this.jwtService.signAsync(payload);
@@ -96,8 +89,8 @@ export class AuthService {
         reputationScore: user.reputationScore,
         gold: user.balanceGold,
         ruby: user.balanceRuby,
-        landsCount: user.lands.length,
-        plantsCount: user.lands.filter((l) => l.plant !== null).length,
+        landsCount: user.lands.length, // Will be 1
+        plantsCount: user.lands.filter((l) => l.plant !== null).length, // Will be 0
       },
     };
   }
@@ -106,7 +99,7 @@ export class AuthService {
     const { walletAddress } = dto;
     const wallet = walletAddress.toLowerCase();
 
-    // Tìm user đã tồn tại
+    // Find existing user
     const user = await this.prisma.user.findUnique({
       where: { walletAddress: wallet },
       include: {
@@ -122,8 +115,6 @@ export class AuthService {
       throw new NotFoundException("User not found. Please register first.");
     }
 
-    // Login chỉ dựa trên walletAddress,
-    // các thông tin profile sẽ được cập nhật qua user/profile API
     const payload = { sub: user.id, walletAddress: user.walletAddress };
     const accessToken = await this.jwtService.signAsync(payload);
 
