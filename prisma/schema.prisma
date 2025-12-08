@@ -9,34 +9,31 @@ datasource db {
 }
 
 model User {
-  id              String   @id @default(dbgenerated("gen_random_uuid()"))
-  walletAddress   String   @unique(map: "users_walletAddress_key") @map("wallet_address")
-  username        String?
-  xp              Int      @default(0)
-  reputationScore Int      @default(0) @map("reputation_score")
-  balanceRuby     Int      @default(0) @map("balance_ruby")
-  balanceGold     Int      @default(0) @map("balance_gold")
-  createdAt       DateTime @default(now()) @map("created_at")
-  // Primary network label for display only. Actual multi-chain
-  // addresses can be handled separately later.
-  network         String   @default("multi-chain")
-  avatar          String?
-  bio             String?
-  twitter         String?
-  github          String?
-  discord         String?
-  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
-
-  inventoryItems  InventoryItem[]
-  lands           Land[]
-  missions        Mission[]
-  missionLogs     MissionLog[]
-  soulboundTokens SoulboundToken[]
-  seeds           Seed[]
+  id                  String               @id @default(dbgenerated("gen_random_uuid()"))
+  walletAddress       String               @unique(map: "users_walletAddress_key") @map("wallet_address")
+  username            String?
+  xp                  Int                  @default(0)
+  reputationScore     Int                  @default(0) @map("reputation_score")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  network             String               @default("multi-chain")
+  avatar              String?
+  bio                 String?
+  twitter             String?
+  github              String?
+  discord             String?
+  updatedAt           DateTime             @default(now()) @updatedAt @map("updated_at")
+  balanceGold         Int                  @default(0) @map("balance_gold")
+  balanceRuby         Int                  @default(0) @map("balance_ruby")
+  dailyStreak         DailyStreak?
+  inventoryItems      InventoryItem[]
+  lands               Land[]
+  missionLogs         MissionLog[]
+  missions            Mission[]
   phygitalRedemptions PhygitalRedemption[]
-  shopPurchases  ShopPurchase[]
-  dailyStreak    DailyStreak?
-  streakCheckins StreakCheckin[]
+  seeds               Seed[]
+  shopPurchases       ShopPurchase[]
+  soulboundTokens     SoulboundToken[]
+  streakCheckins      StreakCheckin[]
 
   @@map("users")
 }
@@ -61,61 +58,47 @@ model Plant {
   landId           String    @unique @map("land_id")
   type             String
   stage            String    @default("DIGGING")
-  
   plantedAt        DateTime  @map("planted_at")
   lastInteractedAt DateTime  @map("last_interacted_at")
-  
-  // Digging phase
-  diggingStartedAt DateTime?  @map("digging_started_at")
-  diggingDuration  Int        @default(0) @map("digging_duration")
-  diggingCompleted Boolean    @default(false) @map("digging_completed")
-  
-  // Growing phase
-  growingStartedAt DateTime?  @map("growing_started_at")
-  growingDuration  Int        @default(0) @map("growing_duration")
-  
-  // Interactions
-  interactions     Int        @default(0)
-  waterCount       Int        @default(0) @map("water_count")
-  wateredBy        String[]   @default([]) @map("watered_by")
-  lastWateredAt    DateTime?  @map("last_watered_at")
-  
-  // Game mechanics (add these missing fields)
-  githubCommits    Int        @default(0) @map("github_commits")
-  isGoldBranch     Boolean    @default(false) @map("is_gold_branch")
-  
-  // Harvest
-  isHarvestable    Boolean    @default(false) @map("is_harvestable")
-  harvestedAt      DateTime?  @map("harvested_at")
-  fruitYield       Int        @default(0) @map("fruit_yield")
-  
-  createdAt        DateTime   @default(now()) @map("created_at")
-  updatedAt        DateTime   @updatedAt @map("updated_at")
-  
-  land             Land       @relation(fields: [landId], references: [id], onDelete: Cascade)
-  
+  diggingStartedAt DateTime? @map("digging_started_at")
+  diggingDuration  Int       @default(0) @map("digging_duration")
+  diggingCompleted Boolean   @default(false) @map("digging_completed")
+  growingStartedAt DateTime? @map("growing_started_at")
+  growingDuration  Int       @default(0) @map("growing_duration")
+  interactions     Int       @default(0)
+  waterCount       Int       @default(0) @map("water_count")
+  wateredBy        String[]  @default([]) @map("watered_by")
+  lastWateredAt    DateTime? @map("last_watered_at")
+  githubCommits    Int       @default(0) @map("github_commits")
+  isGoldBranch     Boolean   @default(false) @map("is_gold_branch")
+  isHarvestable    Boolean   @default(false) @map("is_harvestable")
+  harvestedAt      DateTime? @map("harvested_at")
+  fruitYield       Int       @default(0) @map("fruit_yield")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  dailyWaterCount  Int       @default(0) @map("daily_water_count")
+  lastWaterDate    DateTime? @map("last_water_date")
+  land             Land      @relation(fields: [landId], references: [id], onDelete: Cascade)
+
   @@index([landId])
+  @@index([lastWaterDate])
   @@map("plants")
 }
 
 model Seed {
-  id     String @id @default(uuid())
-  userId String @map("user_id")
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  type     String // ALGAE, MUSHROOM, TREE
-  rarity   String @default("COMMON") // COMMON, RARE, EPIC, LEGENDARY (for TREE F0-F3)
-  quantity Int    @default(1)
-
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  type      String
+  rarity    String   @default("COMMON")
+  quantity  Int      @default(1)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, type])
   @@map("seeds")
 }
 
-// --- INVENTORY ITEM (for all items: fruits, seeds, fertilizers, etc.) ---
-// Seeds are stored as SEED_COMMON, SEED_RARE, SEED_EPIC, SEED_LEGENDARY in itemType
 model InventoryItem {
   id        String   @id @default(dbgenerated("gen_random_uuid()"))
   userId    String   @map("user_id")
@@ -129,7 +112,6 @@ model InventoryItem {
   @@map("inventory_items")
 }
 
-// --- MISSION ---
 model Mission {
   id          String   @id @default(dbgenerated("gen_random_uuid()"))
   userId      String   @map("user_id")
@@ -139,13 +121,11 @@ model Mission {
   target      Int
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("missions")
 }
 
-// --- MISSION LOG ---
 model MissionLog {
   id          String    @id @default(dbgenerated("gen_random_uuid()"))
   userId      String    @map("user_id")
@@ -172,7 +152,6 @@ model SoulboundToken {
   @@map("soulbound_tokens")
 }
 
-// --- EVENTS (local OverGuild events, decoupled from FundX) ---
 model Event {
   id            String   @id @default(dbgenerated("gen_random_uuid()"))
   name          String
@@ -180,9 +159,9 @@ model Event {
   location      String
   startTime     DateTime @map("start_time")
   endTime       DateTime @map("end_time")
-  creatorWallet String   @map("creator_wallet") // ✅ Add this field
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
+  creatorWallet String   @map("creator_wallet")
 
   @@map("events")
 }
@@ -197,8 +176,7 @@ model PhygitalRedemption {
   metadata    Json?
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("phygital_redemptions")
@@ -207,40 +185,37 @@ model PhygitalRedemption {
 model ShopPurchase {
   id        String   @id @default(dbgenerated("gen_random_uuid()"))
   userId    String   @map("user_id")
-  shopType  String   @map("shop_type") // e.g. GOLD
-  itemKey   String   @map("item_key")  // e.g. SHOVEL, BUG_GLOVE
+  shopType  String   @map("shop_type")
+  itemKey   String   @map("item_key")
   quantity  Int      @default(1)
   createdAt DateTime @default(now()) @map("created_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, shopType, itemKey, createdAt])
   @@map("shop_purchases")
 }
 
 model DailyStreak {
-  id            String    @id @default(dbgenerated("gen_random_uuid()"))
+  id            String    @id @default(dbgenerated("(gen_random_uuid())::text"))
   userId        String    @unique @map("user_id")
   currentStreak Int       @default(0) @map("current_streak")
   lastCheckinAt DateTime? @map("last_checkin_at")
   totalCycles   Int       @default(0) @map("total_cycles")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([lastCheckinAt, currentStreak])
   @@map("daily_streaks")
 }
 
 model StreakCheckin {
-  id        String   @id @default(dbgenerated("gen_random_uuid()"))
+  id        String   @id @default(dbgenerated("(gen_random_uuid())::text"))
   userId    String   @map("user_id")
   streakDay Int      @map("streak_day")
   rewards   Json     @map("rewards")
   checkinAt DateTime @default(now()) @map("checkin_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, checkinAt])
   @@map("streak_checkins")

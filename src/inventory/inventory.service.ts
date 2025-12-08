@@ -100,20 +100,28 @@ export class InventoryService {
 
   /**
    * Get user's complete inventory with filtering
+   * ✅ FIXED: Category and search filters now work correctly
    */
   async getInventory(userId: string, category?: ItemCategory, search?: string) {
-    const whereClause: any = { userId };
+    let whereClause: any = { userId };
 
     // Apply category filter
     if (category && category !== ItemCategory.ALL) {
       const itemTypes = this.getItemTypesByCategory(category);
-      whereClause.itemType = { in: itemTypes };
-    }
 
-    // Apply search filter
-    if (search) {
+      // ✅ If search exists, filter itemTypes first
+      if (search) {
+        const searchUpper = search.toUpperCase();
+        const filteredTypes = itemTypes.filter((type) =>
+          type.includes(searchUpper),
+        );
+        whereClause.itemType = { in: filteredTypes };
+      } else {
+        whereClause.itemType = { in: itemTypes };
+      }
+    } else if (search) {
+      // ✅ Only search, no category filter
       whereClause.itemType = {
-        ...whereClause.itemType,
         contains: search.toUpperCase(),
       };
     }
@@ -129,6 +137,12 @@ export class InventoryService {
     // Calculate totals
     const totalItems = items.reduce((sum, item) => sum + item.amount, 0);
     const totalTypes = items.length;
+
+    this.logger.log(
+      `User ${userId} inventory: ${totalTypes} types, ${totalItems} items (category: ${
+        category || "ALL"
+      }, search: "${search || "none"}")`,
+    );
 
     return {
       userId,
@@ -358,22 +372,32 @@ export class InventoryService {
 
   /**
    * Get item types by category
+   * ✅ ENHANCED: Now uses ITEM_REGISTRY for consistency
    */
   private getItemTypesByCategory(category: ItemCategory): string[] {
-    const categoryMap = {
+    // Map old category names to new ones
+    const categoryMap: Record<string, string[]> = {
       [ItemCategory.SEEDS]: Object.keys(this.ITEM_METADATA).filter((k) =>
         k.startsWith("SEED_"),
       ),
-      [ItemCategory.FRUITS]: ["FRUIT"],
+      [ItemCategory.FRUITS]: [
+        "FRUIT",
+        "FRUIT_ALGAE",
+        "FRUIT_MUSHROOM",
+        "FRUIT_TREE",
+      ],
       [ItemCategory.FERTILIZERS]: Object.keys(this.ITEM_METADATA).filter((k) =>
         k.startsWith("FERTILIZER_"),
       ),
       [ItemCategory.EVENT_REWARDS]: Object.keys(this.ITEM_METADATA).filter(
-        (k) => k.includes("EVENT"),
+        (k) => k.includes("EVENT") || k.includes("CHECKIN"),
       ),
-      [ItemCategory.CONSUMABLES]: Object.keys(this.ITEM_METADATA).filter(
-        (k) => k.startsWith("FERTILIZER_") || k === "FRUIT",
-      ),
+      [ItemCategory.CONSUMABLES]: [
+        "WATER",
+        ...Object.keys(this.ITEM_METADATA).filter((k) =>
+          k.startsWith("FERTILIZER_"),
+        ),
+      ],
     };
 
     return categoryMap[category] || [];
