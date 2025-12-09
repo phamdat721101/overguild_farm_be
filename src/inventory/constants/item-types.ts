@@ -39,6 +39,10 @@ export const ITEM_TYPES = {
 
   // Water (for daily check-in)
   WATER: "WATER",
+
+  // ✅ NEW: Streak reward items
+  BUG_GLOVE: "BUG_GLOVE",
+  PESTICIDE: "PESTICIDE",
 } as const;
 
 export type ItemType = (typeof ITEM_TYPES)[keyof typeof ITEM_TYPES];
@@ -229,6 +233,22 @@ export const ITEM_REGISTRY: Record<string, ItemMetadata> = {
     icon: "💧",
     description:
       "Used to water plants. Receive daily from check-ins. Each water adds +0.5 bonus fruit at harvest.",
+  },
+
+  // ✅ NEW: Vietnamese streak items
+  [ITEM_TYPES.BUG_GLOVE]: {
+    name: "Găng Tay Bắt Sâu",
+    rarity: RARITY.COMMON,
+    category: "TOOLS",
+    icon: "🧤",
+    description: "Găng tay đặc biệt để bắt sâu bọ trên cây trồng",
+  },
+  [ITEM_TYPES.PESTICIDE]: {
+    name: "Thuốc Trừ Sâu",
+    rarity: RARITY.COMMON,
+    category: "FERTILIZERS",
+    icon: "🧪",
+    description: "Thuốc diệt sâu bệnh hiệu quả cho cây trồng",
   },
 };
 

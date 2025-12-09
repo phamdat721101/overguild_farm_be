@@ -9,44 +9,52 @@ export interface DailyReward {
   items: ItemReward[];
 }
 
+// ✅ NEW: 7-day Vietnamese streak rewards
 export const STREAK_REWARDS: Record<number, DailyReward> = {
   1: {
-    gold: 10,
+    // Thứ 2 (Monday)
+    gold: 100,
     ruby: 0,
-    items: [{ itemType: "SEED_COMMON", amount: 1 }],
+    items: [],
   },
   2: {
-    gold: 15,
+    // Thứ 3 (Tuesday)
+    gold: 0,
     ruby: 0,
-    items: [{ itemType: "SEED_COMMON", amount: 1 }],
+    items: [{ itemType: "BUG_GLOVE", amount: 1 }], // Găng Tay Bắt Sâu
   },
   3: {
-    gold: 20,
+    // Thứ 4 (Wednesday)
+    gold: 0,
     ruby: 0,
-    items: [{ itemType: "SEED_RARE", amount: 1 }],
+    items: [{ itemType: "GEM", amount: 20 }], // 20 Gem
   },
   4: {
-    gold: 25,
+    // Thứ 5 (Thursday)
+    gold: 0,
     ruby: 0,
-    items: [{ itemType: "FERTILIZER_COMMON", amount: 1 }],
+    items: [{ itemType: "SEED_ALGAE", amount: 2 }], // 2 Mầm Tảo
   },
   5: {
-    gold: 30,
+    // Thứ 6 (Friday)
+    gold: 0,
     ruby: 0,
-    items: [{ itemType: "SEED_EPIC", amount: 1 }],
+    items: [{ itemType: "PESTICIDE", amount: 1 }], // Thuốc Trừ Sâu
   },
   6: {
-    gold: 40,
+    // Thứ 7 (Saturday)
+    gold: 200,
     ruby: 0,
-    items: [{ itemType: "FERTILIZER_RARE", amount: 1 }],
+    items: [],
   },
   7: {
-    gold: 50,
-    ruby: 5,
-    items: [{ itemType: "SEED_LEGENDARY", amount: 1 }],
+    // CN (Sunday)
+    gold: 0,
+    ruby: 0,
+    items: [{ itemType: "SEED_MUSHROOM", amount: 1 }], // Bào Tử Nấm
   },
 };
 
 export const MAX_STREAK_DAYS = 7;
-export const STREAK_EXPIRY_HOURS = 24;
-export const STREAK_RESET_HOURS = 48;
+export const STREAK_EXPIRY_HOURS = 24; // Must check-in within 24 hours
+export const STREAK_RESET_HOURS = 48; // Streak resets if > 48 hours

@@ -57,6 +57,50 @@ export class StreakService {
     return nextCheckin;
   }
 
+  /**
+   * Get item metadata for Vietnamese rewards
+   * ✅ UPDATED: Added new item types
+   */
+  private getItemMetadata(itemType: string) {
+    const ITEM_METADATA: Record<
+      string,
+      { name: string; rarity: string; icon: string }
+    > = {
+      // Seeds
+      SEED_COMMON: { name: "Hạt Giống Thường", rarity: "COMMON", icon: "🌱" },
+      SEED_RARE: { name: "Hạt Giống Hiếm", rarity: "RARE", icon: "🌿" },
+      SEED_EPIC: { name: "Hạt Giống Sử Thi", rarity: "EPIC", icon: "🌳" },
+      SEED_LEGENDARY: { name: "Hạt Giống Huyền Thoại", rarity: "LEGENDARY", icon: "🌲" },
+      SEED_ALGAE: { name: "Mầm Tảo", rarity: "COMMON", icon: "🌿" },
+      SEED_MUSHROOM: { name: "Bào Tử Nấm", rarity: "RARE", icon: "🍄" },
+      SEED_TREE: { name: "Hạt Cây", rarity: "EPIC", icon: "🌳" },
+
+      // Fertilizers
+      FERTILIZER_COMMON: { name: "Phân Bón Thường", rarity: "COMMON", icon: "💩" },
+      FERTILIZER_RARE: { name: "Phân Bón Hiếm", rarity: "RARE", icon: "✨" },
+      FERTILIZER_EPIC: { name: "Phân Bón Sử Thi", rarity: "EPIC", icon: "💫" },
+      FERTILIZER_LEGENDARY: { name: "Phân Bón Huyền Thoại", rarity: "LEGENDARY", icon: "⭐" },
+
+      // ✅ NEW: Vietnamese streak rewards
+      BUG_GLOVE: { name: "Găng Tay Bắt Sâu", rarity: "COMMON", icon: "🧤" },
+      PESTICIDE: { name: "Thuốc Trừ Sâu", rarity: "COMMON", icon: "🧪" },
+      GEM: { name: "Gem", rarity: "RARE", icon: "💎" },
+      GOLD: { name: "Vàng", rarity: "COMMON", icon: "🪙" },
+
+      // Event rewards
+      EVENT_TICKET: { name: "Vé Sự Kiện", rarity: "RARE", icon: "🎫" },
+      REWARD_BOX: { name: "Hộp Quà", rarity: "EPIC", icon: "🎁" },
+    };
+
+    return (
+      ITEM_METADATA[itemType] || {
+        name: itemType,
+        rarity: "COMMON",
+        icon: "📦",
+      }
+    );
+  }
+
   calculateRewards(streakDay: number): RewardDto {
     const reward = STREAK_REWARDS[streakDay];
     if (!reward) {
@@ -76,49 +120,6 @@ export class StreakService {
       ruby: reward.ruby,
       items: enrichedItems,
     };
-  }
-
-  private getItemMetadata(itemType: string) {
-    const ITEM_METADATA = {
-      SEED_COMMON: {
-        name: "Common Seed",
-        rarity: "COMMON",
-        icon: "🌱",
-      },
-      SEED_RARE: {
-        name: "Rare Seed",
-        rarity: "RARE",
-        icon: "🌿",
-      },
-      SEED_EPIC: {
-        name: "Epic Seed",
-        rarity: "EPIC",
-        icon: "🌳",
-      },
-      SEED_LEGENDARY: {
-        name: "Legendary Seed",
-        rarity: "LEGENDARY",
-        icon: "🌲",
-      },
-      FERTILIZER_COMMON: {
-        name: "Common Fertilizer",
-        rarity: "COMMON",
-        icon: "💩",
-      },
-      FERTILIZER_RARE: {
-        name: "Rare Fertilizer",
-        rarity: "RARE",
-        icon: "✨",
-      },
-    };
-
-    return (
-      ITEM_METADATA[itemType] || {
-        name: itemType,
-        rarity: "COMMON",
-        icon: "📦",
-      }
-    );
   }
 
   async getStreakStatus(userId: string): Promise<StreakStatusDto> {
@@ -221,6 +222,10 @@ export class StreakService {
     }
   }
 
+  /**
+   * Perform daily check-in
+   * ✅ LOGIC: Resets to Day 1 if user completes Day 7
+   */
   async performCheckin(userId: string): Promise<CheckinResponseDto> {
     await this.validateCheckin(userId);
 
@@ -246,13 +251,13 @@ export class StreakService {
 
     let newTotalCycles = streak.totalCycles;
     if (newStreak > MAX_STREAK_DAYS) {
-      newStreak = 0;
+      // ✅ FIXED: Complete cycle, reset to Day 1
+      newStreak = 1; // Start new cycle from Day 1
       newTotalCycles += 1;
-      this.logger.log(`User ${userId} completed a streak cycle!`);
+      this.logger.log(`User ${userId} completed streak cycle ${newTotalCycles}!`);
     }
 
-    const streakDay = newStreak === 0 ? MAX_STREAK_DAYS : newStreak;
-
+    const streakDay = newStreak;
     const rewards = this.calculateRewards(streakDay);
 
     const result = await this.prisma.$transaction(async (tx) => {
@@ -280,6 +285,10 @@ export class StreakService {
 
     const nextCheckinAt = this.getNextCheckinTime(result.lastCheckinAt);
 
+    // ✅ UPDATED: Vietnamese message with day name
+    const dayNames = ["", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ Nhật"];
+    const dayName = dayNames[streakDay];
+
     return {
       success: true,
       streakDay,
@@ -287,7 +296,7 @@ export class StreakService {
       totalCycles: result.totalCycles,
       rewards,
       nextCheckinAt,
-      message: `Check-in successful! Day ${streakDay} of ${MAX_STREAK_DAYS}`,
+      message: `✅ Điểm danh thành công! ${dayName} (Ngày ${streakDay}/7)`,
     };
   }
 
