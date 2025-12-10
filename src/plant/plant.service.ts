@@ -181,12 +181,6 @@ export class PlantService {
       throw new BadRequestException("This plant has wilted. It cannot be revived.");
     }
 
-    if (plant.stage === "DIGGING") {
-      throw new BadRequestException(
-        "Plant is in DIGGING phase. Wait for digging to complete automatically.",
-      );
-    }
-
     if (plant.stage === "MATURE") {
       throw new BadRequestException("This plant is ready to harvest!");
     }
