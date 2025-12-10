@@ -94,6 +94,7 @@ export class PlantService {
 
   /**
    * Plant a seed - starts in DIGGING phase
+   * ✅ UPDATED: Set lastInteractedAt to past time to allow immediate first water
    */
   async plantSeed(userId: string, landId: string, seedType: string) {
     const config = this.PLANT_CONFIGS[seedType];
@@ -121,13 +122,19 @@ export class PlantService {
     await this.seedService.consumeSeed(userId, seedType);
 
     const now = new Date();
+    
+    // ✅ KEY CHANGE: Set lastInteractedAt to (now - cooldown) to bypass first water cooldown
+    const initialLastInteracted = new Date(
+      now.getTime() - (this.WATER_COOLDOWN_HOURS * 60 * 60 * 1000)
+    );
+
     const plant = await this.prisma.plant.create({
       data: {
         landId,
         type: seedType,
         stage: "DIGGING",
         plantedAt: now,
-        lastInteractedAt: now,
+        lastInteractedAt: initialLastInteracted, // ✅ Set to past time
         diggingStartedAt: now,
         diggingDuration: config.diggingHours,
         growingDuration: config.growingHours,
@@ -139,7 +146,7 @@ export class PlantService {
     });
 
     this.logger.log(
-      `User ${userId} planted ${seedType} on land ${landId}. Digging: ${config.diggingHours}h`,
+      `User ${userId} planted ${seedType} on land ${landId}. First water available immediately.`,
     );
 
     try {
@@ -155,17 +162,21 @@ export class PlantService {
         stage: plant.stage,
         plantedAt: plant.plantedAt,
       },
-      message: `🌱 Successfully planted ${config.nameVi}! Digging phase: ${config.diggingHours} hours`,
+      message: `🌱 Successfully planted ${config.nameVi}! You can water it immediately.`,
       phase: "DIGGING",
       diggingTime: `${config.diggingHours}h`,
       growingTime: `${config.growingHours}h`,
       totalTime: `${config.totalHours}h`,
-      note: "⏳ Digging phase completes automatically. Water during GROWING phase to speed up.",
+      canWaterNow: true, // ✅ Indicate immediate watering available
+      note: "💧 Water now to start growth tracking!",
     };
   }
 
   /**
    * Water a plant (daily limit: 1 per day per user)
+   * ✅ LOGIC:
+   * - First water: No cooldown (lastInteractedAt was set to past on plant creation)
+   * - Subsequent waters: 1-hour cooldown + daily limit
    */
   async waterPlant(plantId: string, watererId: string) {
     const plant = await this.prisma.plant.findUnique({
@@ -185,12 +196,11 @@ export class PlantService {
       throw new BadRequestException("This plant is ready to harvest!");
     }
 
-    // ✅ Check daily water limit for this user
+    // ✅ Check daily water limit
     const today = this.getToday();
     const lastWaterDate = plant.lastWaterDate ? this.getToday(plant.lastWaterDate) : null;
     const isNewDay = !lastWaterDate || lastWaterDate < today;
 
-    // Reset daily count if new day
     let dailyWaterCount = isNewDay ? 0 : plant.dailyWaterCount;
 
     if (dailyWaterCount >= this.DAILY_WATER_LIMIT) {
@@ -203,7 +213,7 @@ export class PlantService {
       );
     }
 
-    // Check cooldown (1 hour between waters)
+    // ✅ Check cooldown (automatically bypassed for first water due to past timestamp)
     const oneHourAgo = new Date(Date.now() - this.WATER_COOLDOWN_HOURS * 60 * 60 * 1000);
     if (plant.lastInteractedAt > oneHourAgo) {
       const nextWaterTime = new Date(
@@ -227,7 +237,7 @@ export class PlantService {
         interactions: newInteractions,
         dailyWaterCount: newDailyWaterCount,
         lastWaterDate: new Date(),
-        lastInteractedAt: new Date(),
+        lastInteractedAt: new Date(), // ✅ Update to current time (activates cooldown for next water)
         stage: newStage,
       },
       include: { land: true },
@@ -242,9 +252,11 @@ export class PlantService {
     const stageChanged = oldStage !== newStage;
     const nextStageInfo = this.getNextStageInfo(newStage, newWaterCount, plant.type);
     const watersRemainingToday = this.DAILY_WATER_LIMIT - newDailyWaterCount;
+    
+    const isFirstWater = newWaterCount === 1;
 
     this.logger.log(
-      `User ${watererId} watered plant ${plantId} (${oldStage} → ${newStage}, ${newWaterCount} total waters, ${newDailyWaterCount}/${this.DAILY_WATER_LIMIT} today)`,
+      `User ${watererId} watered plant ${plantId} (${oldStage} → ${newStage}, ${newWaterCount} total, ${newDailyWaterCount}/${this.DAILY_WATER_LIMIT} today, first: ${isFirstWater})`,
     );
 
     return {
@@ -254,6 +266,7 @@ export class PlantService {
       newStage,
       waterCount: newWaterCount,
       interactions: newInteractions,
+      isFirstWater, // ✅ NEW: Indicate if this was first water
       dailyProgress: {
         watersUsedToday: newDailyWaterCount,
         watersRemainingToday,
@@ -269,7 +282,7 @@ export class PlantService {
 
   /**
    * Get user's garden with detailed plant info
-   * ✅ Auto-reset daily water count when fetching garden
+   * ✅ UPDATED: Show if first water is available
    */
   async getGarden(userId: string) {
     const lands = await this.prisma.land.findMany({
@@ -281,7 +294,7 @@ export class PlantService {
     const now = new Date();
     const today = this.getToday();
 
-    // ✅ Auto-reset daily water counts for all plants if new day
+    // Auto-reset daily water counts for new day
     for (const land of lands) {
       if (land.plant) {
         const lastWaterDate = land.plant.lastWaterDate
@@ -297,11 +310,10 @@ export class PlantService {
             },
           });
 
-          // Update local object for response
           land.plant.dailyWaterCount = 0;
 
           this.logger.log(
-            `Reset daily water count for plant ${land.plant.id} (new day: ${today.toISOString()})`,
+            `Reset daily water count for plant ${land.plant.id}`,
           );
         }
       }
@@ -322,7 +334,7 @@ export class PlantService {
       const plant = land.plant;
       const config = this.PLANT_CONFIGS[plant.type] || this.PLANT_CONFIGS.ALGAE;
 
-      // Calculate time-based info
+      // Calculate times
       const plantedHoursAgo = (now.getTime() - plant.plantedAt.getTime()) / (1000 * 60 * 60);
       const lastWateredHoursAgo =
         (now.getTime() - plant.lastInteractedAt.getTime()) / (1000 * 60 * 60);
@@ -336,28 +348,23 @@ export class PlantService {
       const isCritical = hoursToWilt < 12;
       const isDead = plant.stage === "DEAD" || hoursToWilt <= 0;
 
-      // Water cooldown
+      // ✅ Water cooldown calculation
       const nextWaterTime = new Date(
         plant.lastInteractedAt.getTime() + this.WATER_COOLDOWN_HOURS * 60 * 60 * 1000,
       );
       const canWaterNow = now >= nextWaterTime && plant.dailyWaterCount < this.DAILY_WATER_LIMIT;
       const watersRemainingToday = Math.max(0, this.DAILY_WATER_LIMIT - plant.dailyWaterCount);
 
+      // ✅ NEW: Check if this is first water
+      const isFirstWater = plant.waterCount === 0;
+      const hoursSinceLastWater = (now.getTime() - plant.lastInteractedAt.getTime()) / (1000 * 60 * 60);
+
       // Stage info
       const currentStageInfo = config.stages[plant.stage] || config.stages.SEED;
       const nextStageInfo = this.getNextStageInfo(plant.stage, plant.waterCount, plant.type);
 
-      // Digging phase info
-      let diggingInfo: {
-        phase: string;
-        elapsed: number;
-        remaining: number;
-        total: number;
-        progress: number;
-        completesAt: string;
-        isComplete: boolean;
-      } | null = null;
-
+      // Digging phase info (if applicable)
+      let diggingInfo = {};
       if (plant.stage === "DIGGING" && plant.diggingStartedAt) {
         const diggingElapsed =
           (now.getTime() - plant.diggingStartedAt.getTime()) / (1000 * 60 * 60);
@@ -401,7 +408,7 @@ export class PlantService {
           plantedAt: plant.plantedAt.toISOString(),
           lastWateredAt: plant.lastInteractedAt.toISOString(),
           hoursSincePlanted: Math.floor(plantedHoursAgo),
-          hoursSinceLastWater: Math.floor(lastWateredHoursAgo),
+          hoursSinceLastWater: Math.floor(hoursSinceLastWater), // ✅ NEW
           estimatedHarvestAt:
             plant.stage === "MATURE"
               ? "Ready now!"
@@ -442,6 +449,8 @@ export class PlantService {
           dailyWaterLimit: this.DAILY_WATER_LIMIT,
           watersRemainingToday,
           resetsAt: this.getTomorrowMidnight().toISOString(),
+          isFirstWater, // ✅ NEW: Indicate no waters yet
+          hoursSinceLastWater: Math.floor(hoursSinceLastWater), // ✅ NEW
         },
         status:
           plant.stage === "MATURE"
