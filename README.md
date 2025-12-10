@@ -53,15 +53,15 @@ Backend service for OverGuild - A Web3 GameFi platform where users grow virtual 
 - **Redeem Flow** - `POST /phygital/redeem` spends resources and records an off-chain redemption request
 - **History Tracking** - `GET /phygital/redemptions` lists past redemptions for the user
 
-| Reward                 | Exchange Cost                                |
-| ---------------------- | -------------------------------------------- |
-| **Tote Bag**           | 1 Tree / 7 Mushrooms / 14 Spores            |
-| **Lottery Ticket**     | 5 Trees / 50 Mushrooms / 100 Spores         |
-| **Razer Headset**      | 10 Trees / 200 Mushrooms / 400 Spores       |
-| **$300 Voucher**       | 50 Trees / 1000 Mushrooms / 2000 Spores     |
-| **1 Chi Gold 9999**    | 100 Trees / 2000 Mushrooms / 4000 Spores    |
-| **Latest iPhone**      | 150 Trees / 3000 Mushrooms / 6000 Spores    |
-| **1 Seed NFT**         | _5000 Mushrooms / 10000 Spores_ (no Trees)  |
+| Reward              | Exchange Cost                              |
+| ------------------- | ------------------------------------------ |
+| **Tote Bag**        | 1 Tree / 7 Mushrooms / 14 Spores           |
+| **Lottery Ticket**  | 5 Trees / 50 Mushrooms / 100 Spores        |
+| **Razer Headset**   | 10 Trees / 200 Mushrooms / 400 Spores      |
+| **$300 Voucher**    | 50 Trees / 1000 Mushrooms / 2000 Spores    |
+| **1 Chi Gold 9999** | 100 Trees / 2000 Mushrooms / 4000 Spores   |
+| **Latest iPhone**   | 150 Trees / 3000 Mushrooms / 6000 Spores   |
+| **1 Seed NFT**      | _5000 Mushrooms / 10000 Spores_ (no Trees) |
 
 ### 🛒 Gold Shop
 
@@ -69,13 +69,13 @@ Backend service for OverGuild - A Web3 GameFi platform where users grow virtual 
 - **Weekly / Daily Limits** - Some items have per-day or per-week purchase caps
 - **Mushroom Spore Exchange** - Convert Algae Spores into Mushrooms via the shop
 
-| Item                    | Price / Requirement                            | Limit             |
-| ----------------------- | ---------------------------------------------- | ----------------- |
-| **Shovel**              | 500 Gold                                       | 1 / week          |
-| **Bug Catch Glove**     | 30 Gold                                        | Unlimited         |
-| **Growth Water**        | 100 Gold                                       | 1 / day           |
-| **Fish Food**           | 20 Gold                                        | Unlimited         |
-| **Mushroom Spore Swap** | 0 Gold + 5x Algae Spore (FRUIT_ALGAE) → 1x Mushroom (FRUIT_MUSHROOM) | 2 / week |
+| Item                    | Price / Requirement                                                  | Limit     |
+| ----------------------- | -------------------------------------------------------------------- | --------- |
+| **Shovel**              | 500 Gold                                                             | 1 / week  |
+| **Bug Catch Glove**     | 30 Gold                                                              | Unlimited |
+| **Growth Water**        | 100 Gold                                                             | 1 / day   |
+| **Fish Food**           | 20 Gold                                                              | Unlimited |
+| **Mushroom Spore Swap** | 0 Gold + 5x Algae Spore (FRUIT_ALGAE) → 1x Mushroom (FRUIT_MUSHROOM) | 2 / week  |
 
 ### 📍 Event Check-in (Location Service)
 
@@ -154,7 +154,25 @@ pnpm prisma db pull
 pnpm prisma db push
 ```
 
-6. **Start development server**
+6. **Setup Redis (for Event-Driven Plant System)**
+
+```bash
+# macOS
+brew install redis
+brew services start redis
+
+# Ubuntu/Debian
+sudo apt-get install redis-server
+sudo systemctl start redis
+
+# Docker
+docker run -d -p 6379:6379 --name redis redis:alpine
+
+# Verify Redis is running
+redis-cli ping  # Should return: PONG
+```
+
+7. **Start development server**
 
 ```bash
 pnpm run start:dev
@@ -180,6 +198,11 @@ JWT_SECRET="your-secret-key-change-in-production"
 
 # FundX API (Microservice)
 FUNDX_API_URL="https://backend-fundx.onrender.com"
+
+# Redis (for Bull Queue - Event-Driven System)
+REDIS_HOST="localhost"
+REDIS_PORT="6379"
+REDIS_PASSWORD=""
 
 # Server
 PORT=3000
@@ -727,6 +750,8 @@ This project is licensed under the MIT License.
 - [x] Fertilizer system with composting
 - [x] Mission system (daily/weekly)
 - [x] Soulbound tokens (achievement badges)
+- [x] **Daily Streak System** - 7-day check-in cycle with progressive rewards
+- [x] **Event-Driven Plant System** - Bull Queue + Redis for async processing
 
 ### 📅 Phase 3 (Planned)
 

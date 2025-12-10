@@ -1,6 +1,8 @@
 import { Module } from "@nestjs/common";
-import { ConfigModule } from "@nestjs/config";
+import { ConfigModule, ConfigService } from "@nestjs/config";
 import { ScheduleModule } from "@nestjs/schedule";
+import { BullModule } from "@nestjs/bull";
+import { EventEmitterModule } from "@nestjs/event-emitter";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 import { SupabaseModule } from "./supabase/supabase.module";
@@ -23,6 +25,18 @@ import { StreakModule } from "./streak/streak.module";
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
+    EventEmitterModule.forRoot(),
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: async (configService: ConfigService) => ({
+        redis: {
+          host: configService.get("REDIS_HOST", "localhost"),
+          port: configService.get("REDIS_PORT", 6379),
+          password: configService.get("REDIS_PASSWORD"),
+        },
+      }),
+      inject: [ConfigService],
+    }),
     SupabaseModule,
     AuthModule,
     UserModule,
