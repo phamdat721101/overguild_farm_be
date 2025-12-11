@@ -7,100 +7,17 @@ import {
 import { PrismaClient } from "@prisma/client";
 import { ItemCategory } from "./dto/query-inventory.dto";
 import { AddItemDto, RemoveItemDto, TransferItemDto } from "./dto/add-item.dto";
+import { ITEM_METADATA } from "../common/constants/game-config.constant";
 
 @Injectable()
 export class InventoryService {
   private readonly logger = new Logger(InventoryService.name);
 
-  // Item metadata for display
-  private readonly ITEM_METADATA = {
-    // Seeds
-    SEED_COMMON: {
-      name: "Common Seed",
-      rarity: "COMMON",
-      category: "SEEDS",
-      icon: "🌱",
-    },
-    SEED_RARE: {
-      name: "Rare Seed",
-      rarity: "RARE",
-      category: "SEEDS",
-      icon: "🌿",
-    },
-    SEED_EPIC: {
-      name: "Epic Seed",
-      rarity: "EPIC",
-      category: "SEEDS",
-      icon: "🌳",
-    },
-    SEED_LEGENDARY: {
-      name: "Legendary Seed",
-      rarity: "LEGENDARY",
-      category: "SEEDS",
-      icon: "🌲",
-    },
-
-    // Fruits
-    FRUIT: { name: "Fruit", rarity: "COMMON", category: "FRUITS", icon: "🍎" },
-    FRUIT_ALGAE: {
-      name: "Bào tử Tảo",
-      rarity: "COMMON",
-      category: "FRUITS",
-      icon: "🧫",
-    },
-    FRUIT_MUSHROOM: {
-      name: "Nấm",
-      rarity: "RARE",
-      category: "FRUITS",
-      icon: "🍄",
-    },
-    FRUIT_TREE: {
-      name: "Trái Cây",
-      rarity: "EPIC",
-      category: "FRUITS",
-      icon: "🌳",
-    },
-
-    // Fertilizers
-    FERTILIZER_COMMON: {
-      name: "Common Fertilizer",
-      rarity: "COMMON",
-      category: "FERTILIZERS",
-      icon: "💩",
-    },
-    FERTILIZER_RARE: {
-      name: "Rare Fertilizer",
-      rarity: "RARE",
-      category: "FERTILIZERS",
-      icon: "✨",
-    },
-    FERTILIZER_EPIC: {
-      name: "Epic Fertilizer",
-      rarity: "EPIC",
-      category: "FERTILIZERS",
-      icon: "💎",
-    },
-    FERTILIZER_LEGENDARY: {
-      name: "Legendary Fertilizer",
-      rarity: "LEGENDARY",
-      category: "FERTILIZERS",
-      icon: "👑",
-    },
-
-    // Event rewards
-    EVENT_CHECKIN_REWARD: {
-      name: "Event Check-in Reward",
-      rarity: "COMMON",
-      category: "EVENT_REWARDS",
-      icon: "🎟️",
-    },
-  };
-
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(private readonly prisma: PrismaClient) { }
 
   /**
    * Get user's complete inventory with filtering
-   * ✅ FIXED: Category and search filters now work correctly
+   * ✅ OPTIMIZED: Category and search filters now efficiently handled at DB level or optimized via constants
    */
   async getInventory(userId: string, category?: ItemCategory, search?: string) {
     let whereClause: any = { userId };
@@ -139,8 +56,7 @@ export class InventoryService {
     const totalTypes = items.length;
 
     this.logger.log(
-      `User ${userId} inventory: ${totalTypes} types, ${totalItems} items (category: ${
-        category || "ALL"
+      `User ${userId} inventory: ${totalTypes} types, ${totalItems} items (category: ${category || "ALL"
       }, search: "${search || "none"}")`,
     );
 
@@ -372,12 +288,12 @@ export class InventoryService {
 
   /**
    * Get item types by category
-   * ✅ ENHANCED: Now uses ITEM_REGISTRY for consistency
+   * ✅ ENHANCED: Now uses ITEM_METADATA for consistency
    */
   private getItemTypesByCategory(category: ItemCategory): string[] {
     // Map old category names to new ones
     const categoryMap: Record<string, string[]> = {
-      [ItemCategory.SEEDS]: Object.keys(this.ITEM_METADATA).filter((k) =>
+      [ItemCategory.SEEDS]: Object.keys(ITEM_METADATA).filter((k) =>
         k.startsWith("SEED_"),
       ),
       [ItemCategory.FRUITS]: [
@@ -386,15 +302,15 @@ export class InventoryService {
         "FRUIT_MUSHROOM",
         "FRUIT_TREE",
       ],
-      [ItemCategory.FERTILIZERS]: Object.keys(this.ITEM_METADATA).filter((k) =>
+      [ItemCategory.FERTILIZERS]: Object.keys(ITEM_METADATA).filter((k) =>
         k.startsWith("FERTILIZER_"),
       ),
-      [ItemCategory.EVENT_REWARDS]: Object.keys(this.ITEM_METADATA).filter(
+      [ItemCategory.EVENT_REWARDS]: Object.keys(ITEM_METADATA).filter(
         (k) => k.includes("EVENT") || k.includes("CHECKIN"),
       ),
       [ItemCategory.CONSUMABLES]: [
         "WATER",
-        ...Object.keys(this.ITEM_METADATA).filter((k) =>
+        ...Object.keys(ITEM_METADATA).filter((k) =>
           k.startsWith("FERTILIZER_"),
         ),
       ],
@@ -410,7 +326,7 @@ export class InventoryService {
     const grouped: Record<string, any[]> = {};
 
     items.forEach((item) => {
-      const metadata = this.ITEM_METADATA[item.itemType] || {
+      const metadata = ITEM_METADATA[item.itemType] || {
         category: "OTHER",
       };
       const category = metadata.category;
@@ -429,7 +345,7 @@ export class InventoryService {
    * Enrich item data with metadata
    */
   private enrichItemData(item: any) {
-    const metadata = this.ITEM_METADATA[item.itemType] || {
+    const metadata = ITEM_METADATA[item.itemType] || {
       name: item.itemType,
       rarity: "COMMON",
       category: "OTHER",

@@ -11,77 +11,15 @@ import { PrismaClient } from "@prisma/client";
 import { SeedService } from "../seed/seed.service";
 import { MissionService } from "../mission/mission.service";
 import { SoulboundTokenService } from "../soulbound-token/soulbound-token.service";
+import {
+  PLANT_CONFIGS,
+  PLANT_CONSTANTS,
+  STAGE_THRESHOLDS,
+} from "../common/constants/game-config.constant";
 
 @Injectable()
 export class PlantService {
   private readonly logger = new Logger(PlantService.name);
-
-  // Plant type configurations with Vietnamese names
-  private readonly PLANT_CONFIGS = {
-    ALGAE: {
-      name: "Tảo",
-      nameVi: "Tảo",
-      source: "Shop/Starter",
-      diggingHours: 1,
-      growingHours: 12,
-      totalHours: 13,
-      baseYield: 3,
-      stages: {
-        SEED: { name: "Hạt", nameVi: "Hạt", duration: 0 },
-        SPROUT: { name: "Mầm", nameVi: "Mầm", duration: 3 },
-        GROWING: { name: "Cây", nameVi: "Cây", duration: 8 },
-        BLOOM: { name: "Hoa", nameVi: "Hoa", duration: 12 },
-        FRUIT: { name: "Quả", nameVi: "Quả", duration: 13 },
-      },
-    },
-    MUSHROOM: {
-      name: "Nấm",
-      nameVi: "Nấm",
-      source: "Craft (5 Tảo)",
-      diggingHours: 10,
-      growingHours: 72,
-      totalHours: 82,
-      baseYield: 5,
-      craftCost: { ALGAE: 5 },
-      stages: {
-        SEED: { name: "Bào tử", nameVi: "Bào tử", duration: 0 },
-        SPROUT: { name: "Sợi nấm", nameVi: "Sợi nấm", duration: 10 },
-        GROWING: { name: "Thân nấm", nameVi: "Thân nấm", duration: 30 },
-        BLOOM: { name: "Nấm trưởng thành", nameVi: "Nấm trưởng thành", duration: 60 },
-        FRUIT: { name: "Nấm thu hoạch", nameVi: "Nấm thu hoạch", duration: 82 },
-      },
-    },
-    TREE: {
-      name: "Cây",
-      nameVi: "Cây",
-      source: "NFT Seed",
-      diggingHours: 72,
-      growingHours: 720,
-      totalHours: 792,
-      baseYield: 10,
-      stages: {
-        SEED: { name: "Hạt giống", nameVi: "Hạt giống", duration: 0 },
-        SPROUT: { name: "Mầm non", nameVi: "Mầm non", duration: 72 },
-        GROWING: { name: "Cây con", nameVi: "Cây con", duration: 240 },
-        BLOOM: { name: "Cây ra hoa", nameVi: "Cây ra hoa", duration: 480 },
-        FRUIT: { name: "Cây có quả", nameVi: "Cây có quả", duration: 792 },
-      },
-    },
-  };
-
-  // Growth thresholds (hours needed for each stage)
-  private readonly STAGE_THRESHOLDS = {
-    SEED: 0,
-    SPROUT: 3,
-    GROWING: 8,
-    BLOOM: 12,
-    FRUIT: 15,
-  };
-
-  // Daily water limit
-  private readonly DAILY_WATER_LIMIT = 1;
-  private readonly WILT_HOURS = 72;
-  private readonly WATER_COOLDOWN_HOURS = 1;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -90,14 +28,14 @@ export class PlantService {
     private readonly missionService: MissionService,
     @Inject(forwardRef(() => SoulboundTokenService))
     private readonly soulboundTokenService: SoulboundTokenService,
-  ) {}
+  ) { }
 
   /**
    * Plant a seed - starts in DIGGING phase
    * ✅ UPDATED: Set lastInteractedAt to past time to allow immediate first water
    */
   async plantSeed(userId: string, landId: string, seedType: string) {
-    const config = this.PLANT_CONFIGS[seedType];
+    const config = PLANT_CONFIGS[seedType];
     if (!config) {
       throw new BadRequestException(
         `Invalid seed type. Must be one of: ALGAE, MUSHROOM, TREE`,
@@ -122,10 +60,10 @@ export class PlantService {
     await this.seedService.consumeSeed(userId, seedType);
 
     const now = new Date();
-    
+
     // ✅ KEY CHANGE: Set lastInteractedAt to (now - cooldown) to bypass first water cooldown
     const initialLastInteracted = new Date(
-      now.getTime() - (this.WATER_COOLDOWN_HOURS * 60 * 60 * 1000)
+      now.getTime() - (PLANT_CONSTANTS.WATER_COOLDOWN_HOURS * 60 * 60 * 1000)
     );
 
     const plant = await this.prisma.plant.create({
@@ -203,21 +141,21 @@ export class PlantService {
 
     let dailyWaterCount = isNewDay ? 0 : plant.dailyWaterCount;
 
-    if (dailyWaterCount >= this.DAILY_WATER_LIMIT) {
+    if (dailyWaterCount >= PLANT_CONSTANTS.DAILY_WATER_LIMIT) {
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
       tomorrow.setHours(0, 0, 0, 0);
 
       throw new BadRequestException(
-        `Daily water limit reached (${this.DAILY_WATER_LIMIT}/day). Next water available at: ${tomorrow.toISOString()}`
+        `Daily water limit reached (${PLANT_CONSTANTS.DAILY_WATER_LIMIT}/day). Next water available at: ${tomorrow.toISOString()}`
       );
     }
 
     // ✅ Check cooldown (automatically bypassed for first water due to past timestamp)
-    const oneHourAgo = new Date(Date.now() - this.WATER_COOLDOWN_HOURS * 60 * 60 * 1000);
+    const oneHourAgo = new Date(Date.now() - PLANT_CONSTANTS.WATER_COOLDOWN_HOURS * 60 * 60 * 1000);
     if (plant.lastInteractedAt > oneHourAgo) {
       const nextWaterTime = new Date(
-        plant.lastInteractedAt.getTime() + this.WATER_COOLDOWN_HOURS * 60 * 60 * 1000,
+        plant.lastInteractedAt.getTime() + PLANT_CONSTANTS.WATER_COOLDOWN_HOURS * 60 * 60 * 1000,
       );
       throw new BadRequestException(
         `This plant was recently watered. Try again after ${nextWaterTime.toISOString()}`,
@@ -251,12 +189,12 @@ export class PlantService {
 
     const stageChanged = oldStage !== newStage;
     const nextStageInfo = this.getNextStageInfo(newStage, newWaterCount, plant.type);
-    const watersRemainingToday = this.DAILY_WATER_LIMIT - newDailyWaterCount;
-    
+    const watersRemainingToday = PLANT_CONSTANTS.DAILY_WATER_LIMIT - newDailyWaterCount;
+
     const isFirstWater = newWaterCount === 1;
 
     this.logger.log(
-      `User ${watererId} watered plant ${plantId} (${oldStage} → ${newStage}, ${newWaterCount} total, ${newDailyWaterCount}/${this.DAILY_WATER_LIMIT} today, first: ${isFirstWater})`,
+      `User ${watererId} watered plant ${plantId} (${oldStage} → ${newStage}, ${newWaterCount} total, ${newDailyWaterCount}/${PLANT_CONSTANTS.DAILY_WATER_LIMIT} today, first: ${isFirstWater})`,
     );
 
     return {
@@ -270,7 +208,7 @@ export class PlantService {
       dailyProgress: {
         watersUsedToday: newDailyWaterCount,
         watersRemainingToday,
-        dailyLimit: this.DAILY_WATER_LIMIT,
+        dailyLimit: PLANT_CONSTANTS.DAILY_WATER_LIMIT,
         resetsAt: this.getTomorrowMidnight().toISOString(),
       },
       ...nextStageInfo,
@@ -282,7 +220,7 @@ export class PlantService {
 
   /**
    * Get user's garden with detailed plant info
-   * ✅ UPDATED: Show if first water is available
+   * ✅ OPTIMIZED: Batch update daily water counts to eliminate N+1 queries
    */
   async getGarden(userId: string) {
     const lands = await this.prisma.land.findMany({
@@ -293,8 +231,9 @@ export class PlantService {
 
     const now = new Date();
     const today = this.getToday();
+    const plantsToResetIds: string[] = [];
 
-    // Auto-reset daily water counts for new day
+    // Identify plants needing reset
     for (const land of lands) {
       if (land.plant) {
         const lastWaterDate = land.plant.lastWaterDate
@@ -303,20 +242,24 @@ export class PlantService {
         const isNewDay = !lastWaterDate || lastWaterDate < today;
 
         if (isNewDay && land.plant.dailyWaterCount > 0) {
-          await this.prisma.plant.update({
-            where: { id: land.plant.id },
-            data: {
-              dailyWaterCount: 0,
-            },
-          });
-
+          plantsToResetIds.push(land.plant.id);
+          // Update in-memory object to reflect reset state immediately
           land.plant.dailyWaterCount = 0;
-
-          this.logger.log(
-            `Reset daily water count for plant ${land.plant.id}`,
-          );
         }
       }
+    }
+
+    // Batch update if needed
+    if (plantsToResetIds.length > 0) {
+      await this.prisma.plant.updateMany({
+        where: {
+          id: { in: plantsToResetIds },
+        },
+        data: {
+          dailyWaterCount: 0,
+        },
+      });
+      this.logger.log(`Batch reset daily water count for ${plantsToResetIds.length} plants`);
     }
 
     return lands.map((land) => {
@@ -332,7 +275,7 @@ export class PlantService {
       }
 
       const plant = land.plant;
-      const config = this.PLANT_CONFIGS[plant.type] || this.PLANT_CONFIGS.ALGAE;
+      const config = PLANT_CONFIGS[plant.type] || PLANT_CONFIGS.ALGAE;
 
       // Calculate times
       const plantedHoursAgo = (now.getTime() - plant.plantedAt.getTime()) / (1000 * 60 * 60);
@@ -341,7 +284,7 @@ export class PlantService {
 
       // Wilt calculation
       const wiltTime = new Date(
-        plant.lastInteractedAt.getTime() + this.WILT_HOURS * 60 * 60 * 1000,
+        plant.lastInteractedAt.getTime() + PLANT_CONSTANTS.WILT_HOURS * 60 * 60 * 1000,
       );
       const hoursToWilt = Math.max(0, (wiltTime.getTime() - now.getTime()) / (1000 * 60 * 60));
       const isWilting = hoursToWilt < 24;
@@ -350,10 +293,10 @@ export class PlantService {
 
       // ✅ Water cooldown calculation
       const nextWaterTime = new Date(
-        plant.lastInteractedAt.getTime() + this.WATER_COOLDOWN_HOURS * 60 * 60 * 1000,
+        plant.lastInteractedAt.getTime() + PLANT_CONSTANTS.WATER_COOLDOWN_HOURS * 60 * 60 * 1000,
       );
-      const canWaterNow = now >= nextWaterTime && plant.dailyWaterCount < this.DAILY_WATER_LIMIT;
-      const watersRemainingToday = Math.max(0, this.DAILY_WATER_LIMIT - plant.dailyWaterCount);
+      const canWaterNow = now >= nextWaterTime && plant.dailyWaterCount < PLANT_CONSTANTS.DAILY_WATER_LIMIT;
+      const watersRemainingToday = Math.max(0, PLANT_CONSTANTS.DAILY_WATER_LIMIT - plant.dailyWaterCount);
 
       // ✅ NEW: Check if this is first water
       const isFirstWater = plant.waterCount === 0;
@@ -413,8 +356,8 @@ export class PlantService {
             plant.stage === "MATURE"
               ? "Ready now!"
               : new Date(
-                  plant.plantedAt.getTime() + config.totalHours * 60 * 60 * 1000,
-                ).toISOString(),
+                plant.plantedAt.getTime() + config.totalHours * 60 * 60 * 1000,
+              ).toISOString(),
         },
         growth: {
           currentStage: plant.stage,
@@ -436,17 +379,17 @@ export class PlantService {
           message: isDead
             ? "☠️ Plant has wilted and cannot be revived"
             : isCritical
-            ? `⚠️ Critical: Plant will wilt in ${Math.floor(hoursToWilt)} hours!`
-            : isWilting
-            ? `⚠️ Warning: Plant will wilt in ${Math.floor(hoursToWilt)} hours`
-            : `💚 Healthy: ${Math.floor(hoursToWilt)} hours until wilt`,
+              ? `⚠️ Critical: Plant will wilt in ${Math.floor(hoursToWilt)} hours!`
+              : isWilting
+                ? `⚠️ Warning: Plant will wilt in ${Math.floor(hoursToWilt)} hours`
+                : `💚 Healthy: ${Math.floor(hoursToWilt)} hours until wilt`,
         },
         watering: {
           canWaterNow,
           nextWaterTime: canWaterNow ? null : nextWaterTime.toISOString(),
-          cooldownHours: this.WATER_COOLDOWN_HOURS,
+          cooldownHours: PLANT_CONSTANTS.WATER_COOLDOWN_HOURS,
           dailyWaterCount: plant.dailyWaterCount,
-          dailyWaterLimit: this.DAILY_WATER_LIMIT,
+          dailyWaterLimit: PLANT_CONSTANTS.DAILY_WATER_LIMIT,
           watersRemainingToday,
           resetsAt: this.getTomorrowMidnight().toISOString(),
           isFirstWater, // ✅ NEW: Indicate no waters yet
@@ -456,10 +399,10 @@ export class PlantService {
           plant.stage === "MATURE"
             ? "READY_TO_HARVEST"
             : plant.stage === "DEAD"
-            ? "DEAD"
-            : plant.stage === "DIGGING"
-            ? "DIGGING"
-            : "GROWING",
+              ? "DEAD"
+              : plant.stage === "DIGGING"
+                ? "DIGGING"
+                : "GROWING",
       };
     });
   }
@@ -469,10 +412,10 @@ export class PlantService {
    * Hạt (0) -> Mầm (3) -> Cây (8) -> Hoa (12) -> Quả (15)
    */
   private calculateStageFromWaters(waterCount: number): string {
-    if (waterCount >= 15) return "MATURE"; // Ready to harvest
-    if (waterCount >= 12) return "BLOOM"; // Hoa
-    if (waterCount >= 8) return "GROWING"; // Cây
-    if (waterCount >= 3) return "SPROUT"; // Mầm
+    if (waterCount >= STAGE_THRESHOLDS.FRUIT) return "MATURE"; // Ready to harvest
+    if (waterCount >= STAGE_THRESHOLDS.BLOOM) return "BLOOM"; // Hoa
+    if (waterCount >= STAGE_THRESHOLDS.GROWING) return "GROWING"; // Cây
+    if (waterCount >= STAGE_THRESHOLDS.SPROUT) return "SPROUT"; // Mầm
     return "SEED"; // Hạt
   }
 
@@ -480,10 +423,16 @@ export class PlantService {
    * Get next stage info with Vietnamese names
    */
   private getNextStageInfo(currentStage: string, waterCount: number, plantType: string) {
-    const config = this.PLANT_CONFIGS[plantType] || this.PLANT_CONFIGS.ALGAE;
+    const config = PLANT_CONFIGS[plantType] || PLANT_CONFIGS.ALGAE;
     const stages = ["SEED", "SPROUT", "GROWING", "BLOOM", "MATURE"];
     const stageNamesVi = ["Hạt", "Mầm", "Cây", "Hoa", "Quả"];
-    const waterTargets = [0, 3, 8, 12, 15];
+    const waterTargets = [
+      STAGE_THRESHOLDS.SEED,
+      STAGE_THRESHOLDS.SPROUT,
+      STAGE_THRESHOLDS.GROWING,
+      STAGE_THRESHOLDS.BLOOM,
+      STAGE_THRESHOLDS.FRUIT
+    ];
 
     const currentIndex = stages.indexOf(currentStage);
 
@@ -539,7 +488,7 @@ export class PlantService {
       );
     }
 
-    const config = this.PLANT_CONFIGS[plant.type] || this.PLANT_CONFIGS.ALGAE;
+    const config = PLANT_CONFIGS[plant.type] || PLANT_CONFIGS.ALGAE;
     const baseYield = config.baseYield;
     const bonusYield = Math.floor(plant.interactions / 5);
     const totalYield = baseYield + bonusYield;
@@ -597,7 +546,7 @@ export class PlantService {
    */
   async interactPlant(plantId: string, userId: string, action: string) {
     this.logger.warn(`Legacy interactPlant called. Use waterPlant instead.`);
-    
+
     // For backward compatibility, treat all interactions as watering
     if (action === "visit" || action === "social") {
       return this.waterPlant(plantId, userId);
@@ -720,8 +669,8 @@ export class PlantService {
         soilQuality: newLand.soilQuality,
       },
       cost: nextPlotIndex > 0 ? 1000 : 0,
-      message: nextPlotIndex === 0 
-        ? '🎉 Welcome! Your first land is free!' 
+      message: nextPlotIndex === 0
+        ? '🎉 Welcome! Your first land is free!'
         : `🏞️ Purchased land plot ${nextPlotIndex + 1} for 1000 gold!`,
     };
   }
@@ -800,13 +749,13 @@ export class PlantService {
           id: land.plant.id,
           type: land.plant.type,
           stage: land.plant.stage,
+          plantedAt: land.plant.plantedAt,
           interactions: land.plant.interactions,
         } : null,
       })),
       summary,
     };
   }
-
   /**
    * Check if plant completed digging or growing phase
    */
@@ -817,7 +766,7 @@ export class PlantService {
     if (plant.stage === "DIGGING" && plant.diggingStartedAt) {
       const diggingEndTime = new Date(
         plant.diggingStartedAt.getTime() +
-          plant.diggingDuration * 60 * 60 * 1000,
+        plant.diggingDuration * 60 * 60 * 1000,
       );
 
       if (now >= diggingEndTime) {
@@ -838,7 +787,7 @@ export class PlantService {
     if (plant.stage === "GROWING" && plant.growingStartedAt) {
       const growingEndTime = new Date(
         plant.growingStartedAt.getTime() +
-          plant.growingDuration * 60 * 60 * 1000,
+        plant.growingDuration * 60 * 60 * 1000,
       );
 
       if (now >= growingEndTime) {
@@ -866,7 +815,7 @@ export class PlantService {
       where: {
         stage: "GROWING",
         lastInteractedAt: {
-          lt: new Date(now.getTime() - this.WILT_HOURS * 60 * 60 * 1000),
+          lt: new Date(now.getTime() - PLANT_CONSTANTS.WILT_HOURS * 60 * 60 * 1000),
         },
       },
     });
