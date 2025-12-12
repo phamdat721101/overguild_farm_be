@@ -24,6 +24,7 @@ model User {
   updatedAt           DateTime             @default(now()) @updatedAt @map("updated_at")
   balanceGold         Int                  @default(0) @map("balance_gold")
   balanceRuby         Int                  @default(0) @map("balance_ruby")
+  balanceGem          Int                  @default(0) @map("balance_gem")
   dailyStreak         DailyStreak?
   inventoryItems      InventoryItem[]
   lands               Land[]

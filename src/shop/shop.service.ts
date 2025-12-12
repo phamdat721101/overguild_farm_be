@@ -1,17 +1,32 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
 import { InventoryService } from "../inventory/inventory.service";
 import { ITEM_TYPES } from "../inventory/constants/item-types";
-import { GOLD_SHOP_ITEMS, GoldShopItemKey } from "./shop.constants";
+import {
+  GOLD_SHOP_ITEMS,
+  GEM_SHOP_ITEMS,
+  CASH_SHOP_ITEMS,
+  GoldShopItemKey,
+  GemShopItemKey,
+  CashShopItemKey,
+} from "./shop.constants";
 import { GoldShopPurchaseDto } from "./dto/gold-shop-purchase.dto";
+import { GemShopPurchaseDto } from "./dto/gem-shop-purchase.dto";
+import { CashShopPurchaseDto } from "./dto/cash-shop-purchase.dto";
 
 @Injectable()
 export class ShopService {
-  private readonly items = GOLD_SHOP_ITEMS;
+  private readonly goldItems = GOLD_SHOP_ITEMS;
+  private readonly gemItems = GEM_SHOP_ITEMS;
+  private readonly cashItems = CASH_SHOP_ITEMS;
 
   constructor(
     private readonly prisma: PrismaClient,
-    private readonly inventoryService: InventoryService,
+    private readonly inventoryService: InventoryService
   ) {}
 
   async getGoldShop(userId: string) {
@@ -29,9 +44,12 @@ export class ShopService {
 
     const limits = await this.getUserLimits(userId);
 
-    const catalog = this.items.map((item) => {
+    const catalog = this.goldItems.map((item) => {
       const key = item.key;
-      const limitInfo = limits[key] || { purchased: 0, remaining: item.limitPerPeriod ?? null };
+      const limitInfo = limits[key] || {
+        purchased: 0,
+        remaining: item.limitPerPeriod ?? null,
+      };
       const affordable = user.balanceGold >= item.priceGold;
 
       return {
@@ -53,7 +71,7 @@ export class ShopService {
   }
 
   async purchaseGoldShopItem(userId: string, dto: GoldShopPurchaseDto) {
-    const config = this.items.find((i) => i.key === dto.itemKey);
+    const config = this.goldItems.find((i) => i.key === dto.itemKey);
     if (!config) {
       throw new NotFoundException("Shop item not found");
     }
@@ -84,7 +102,7 @@ export class ShopService {
 
         if (count >= config.limitPerPeriod) {
           throw new BadRequestException(
-            `Purchase limit reached for ${config.name} (${config.limitPerPeriod} per ${config.period.toLowerCase()})`,
+            `Purchase limit reached for ${config.name} (${config.limitPerPeriod} per ${config.period.toLowerCase()})`
           );
         }
       }
@@ -92,7 +110,7 @@ export class ShopService {
       // Check gold balance
       if (user.balanceGold < config.priceGold) {
         throw new BadRequestException(
-          `Not enough gold. Required ${config.priceGold}, you have ${user.balanceGold}`,
+          `Not enough gold. Required ${config.priceGold}, you have ${user.balanceGold}`
         );
       }
 
@@ -102,11 +120,11 @@ export class ShopService {
         const hasSpores = await this.inventoryService.hasItemAmount(
           userId,
           ITEM_TYPES.FRUIT_ALGAE,
-          5,
+          5
         );
         if (!hasSpores) {
           throw new BadRequestException(
-            "Not enough Algae Spores (FRUIT_ALGAE). You need at least 5 to exchange.",
+            "Not enough Algae Spores (FRUIT_ALGAE). You need at least 5 to exchange."
           );
         }
 
@@ -156,7 +174,7 @@ export class ShopService {
       { purchased: number; remaining: number | null }
     > = {} as any;
 
-    for (const item of this.items) {
+    for (const item of this.goldItems) {
       if (!item.period || !item.limitPerPeriod) {
         result[item.key] = { purchased: 0, remaining: null };
         continue;
@@ -195,6 +213,237 @@ export class ShopService {
     d.setHours(0, 0, 0, 0);
     return d;
   }
+
+  // ===== GEM SHOP =====
+
+  async getGemShop(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        balanceGem: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+
+    const catalog = this.gemItems.map((item) => {
+      const affordable = user.balanceGem >= item.priceGem;
+      return {
+        ...item,
+        affordable,
+      };
+    });
+
+    return {
+      user: {
+        id: user.id,
+        balanceGem: user.balanceGem,
+      },
+      items: catalog,
+    };
+  }
+
+  async purchaseGemShopItem(userId: string, dto: GemShopPurchaseDto) {
+    const config = this.gemItems.find((i) => i.key === dto.itemKey);
+    if (!config) {
+      throw new NotFoundException("Gem shop item not found");
+    }
+
+    const purchase = await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        select: { id: true, balanceGem: true, balanceGold: true },
+      });
+
+      if (!user) {
+        throw new NotFoundException("User not found");
+      }
+
+      // Check gem balance
+      if (user.balanceGem < config.priceGem) {
+        throw new BadRequestException(
+          `Not enough gems. Required ${config.priceGem}, you have ${user.balanceGem}`
+        );
+      }
+
+      // Deduct gems
+      await tx.user.update({
+        where: { id: userId },
+        data: { balanceGem: { decrement: config.priceGem } },
+      });
+
+      // Give rewards
+      if (config.reward) {
+        if (config.reward.itemType && config.reward.amount) {
+          await this.inventoryService.addItem(userId, {
+            itemType: config.reward.itemType,
+            amount: config.reward.amount,
+          });
+        }
+
+        if (config.reward.gold) {
+          await tx.user.update({
+            where: { id: userId },
+            data: { balanceGold: { increment: config.reward.gold } },
+          });
+        }
+      }
+
+      // Record purchase
+      const record = await tx.shopPurchase.create({
+        data: {
+          userId,
+          shopType: "GEM",
+          itemKey: config.key,
+          quantity: 1,
+        },
+      });
+
+      return {
+        record,
+        newBalanceGem: user.balanceGem - config.priceGem,
+        newBalanceGold: user.balanceGold + (config.reward?.gold || 0),
+      };
+    });
+
+    return {
+      success: true,
+      message: `Purchased ${config.name} successfully`,
+      item: config,
+      balanceGem: purchase.newBalanceGem,
+      balanceGold: purchase.newBalanceGold,
+      purchase: purchase.record,
+    };
+  }
+
+  // ===== CASH SHOP =====
+
+  async getCashShop(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        lands: {
+          select: { plotIndex: true },
+          orderBy: { plotIndex: "asc" },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+
+    const currentLandSlots = user.lands.length;
+    const maxLandSlot = Math.max(...user.lands.map((l) => l.plotIndex), 0) + 1;
+
+    const catalog = this.cashItems.map((item) => {
+      let available = true;
+
+      // Check if land slot is already owned
+      if (item.reward?.landSlot) {
+        available = item.reward.landSlot > maxLandSlot;
+      }
+
+      return {
+        ...item,
+        available,
+        currentLandSlots,
+        maxLandSlot,
+      };
+    });
+
+    return {
+      user: {
+        id: user.id,
+        currentLandSlots,
+        maxLandSlot,
+      },
+      items: catalog,
+    };
+  }
+
+  async purchaseCashShopItem(userId: string, dto: CashShopPurchaseDto) {
+    const config = this.cashItems.find((i) => i.key === dto.itemKey);
+    if (!config) {
+      throw new NotFoundException("Cash shop item not found");
+    }
+
+    // TODO: Verify payment with payment provider (Stripe, PayPal, etc.)
+    // For now, we'll assume payment is verified
+
+    const purchase = await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          balanceGem: true,
+          lands: {
+            select: { plotIndex: true },
+            orderBy: { plotIndex: "asc" },
+          },
+        },
+      });
+
+      if (!user) {
+        throw new NotFoundException("User not found");
+      }
+
+      // Give rewards
+      if (config.reward) {
+        if (config.reward.gems) {
+          await tx.user.update({
+            where: { id: userId },
+            data: { balanceGem: { increment: config.reward.gems } },
+          });
+        }
+
+        if (config.reward.landSlot) {
+          const maxPlotIndex = Math.max(
+            ...user.lands.map((l) => l.plotIndex),
+            -1
+          );
+          const newPlotIndex = config.reward.landSlot - 1; // Convert to 0-based index
+
+          if (newPlotIndex <= maxPlotIndex) {
+            throw new BadRequestException("Land slot already owned");
+          }
+
+          await tx.land.create({
+            data: {
+              userId,
+              plotIndex: newPlotIndex,
+              soilQuality: { fertility: 50, hydration: 50 },
+            },
+          });
+        }
+      }
+
+      // Record purchase
+      const record = await tx.shopPurchase.create({
+        data: {
+          userId,
+          shopType: "CASH",
+          itemKey: config.key,
+          quantity: 1,
+        },
+      });
+
+      return {
+        record,
+        newBalanceGem: user.balanceGem + (config.reward?.gems || 0),
+      };
+    });
+
+    return {
+      success: true,
+      message: `Purchased ${config.name} successfully`,
+      item: config,
+      balanceGem: purchase.newBalanceGem,
+      purchase: purchase.record,
+    };
+  }
 }
-
-

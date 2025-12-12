@@ -9,6 +9,8 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { ShopService } from "./shop.service";
 import { GoldShopPurchaseDto } from "./dto/gold-shop-purchase.dto";
+import { GemShopPurchaseDto } from "./dto/gem-shop-purchase.dto";
+import { CashShopPurchaseDto } from "./dto/cash-shop-purchase.dto";
 
 @ApiTags("Shop")
 @ApiBearerAuth("JWT-auth")
@@ -33,6 +35,38 @@ export class ShopController {
   purchaseGoldItem(@CurrentUser() user: any, @Body() dto: GoldShopPurchaseDto) {
     return this.shopService.purchaseGoldShopItem(user.sub, dto);
   }
+
+  @Get("gem")
+  @ApiOperation({ summary: "Get Gem Shop catalog and current gem balance" })
+  @ApiResponse({
+    status: 200,
+    description: "Returns user gem balance and Gem Shop items",
+  })
+  getGemShop(@CurrentUser() user: any) {
+    return this.shopService.getGemShop(user.sub);
+  }
+
+  @Post("gem/purchase")
+  @ApiOperation({ summary: "Purchase an item from the Gem Shop" })
+  @ApiResponse({ status: 201, description: "Purchase completed" })
+  purchaseGemItem(@CurrentUser() user: any, @Body() dto: GemShopPurchaseDto) {
+    return this.shopService.purchaseGemShopItem(user.sub, dto);
+  }
+
+  @Get("cash")
+  @ApiOperation({ summary: "Get Cash Shop catalog and current status" })
+  @ApiResponse({
+    status: 200,
+    description: "Returns Cash Shop items and user status",
+  })
+  getCashShop(@CurrentUser() user: any) {
+    return this.shopService.getCashShop(user.sub);
+  }
+
+  @Post("cash/purchase")
+  @ApiOperation({ summary: "Purchase an item from the Cash Shop" })
+  @ApiResponse({ status: 201, description: "Purchase completed" })
+  purchaseCashItem(@CurrentUser() user: any, @Body() dto: CashShopPurchaseDto) {
+    return this.shopService.purchaseCashShopItem(user.sub, dto);
+  }
 }
-
-
