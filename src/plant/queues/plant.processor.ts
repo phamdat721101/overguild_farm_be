@@ -19,7 +19,7 @@ export class PlantProcessor {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly eventEmitter: EventEmitter2
-  ) {}
+  ) { }
 
   @Process(PlantJobType.PROCESS_PLANT_CREATED)
   async handlePlantCreated(job: Job<PlantJobData>) {
@@ -141,44 +141,10 @@ export class PlantProcessor {
         }
       }
 
-      // Find plants in GROWING stage that are ready to harvest
-      const growingPlants = await this.prisma.plant.findMany({
-        where: {
-          stage: "GROWING",
-          isHarvestable: false,
-        },
-        take: batchSize,
-      });
+      // Note: GROWING -> HARVESTABLE is now handled by PlantService based on Hydration (activeGrowthHours)
+      // We removed the time-based logic here to avoid conflict.
 
-      for (const plant of growingPlants) {
-        if (!plant.growingStartedAt) continue;
-
-        const elapsedMs = now.getTime() - plant.growingStartedAt.getTime();
-        const elapsedSeconds = Math.floor(elapsedMs / 1000);
-
-        if (elapsedSeconds >= plant.growingDuration) {
-          // Transition to HARVESTABLE
-          await this.prisma.plant.update({
-            where: { id: plant.id },
-            data: {
-              stage: "HARVESTABLE",
-              isHarvestable: true,
-            },
-          });
-
-          // Emit stage updated event
-          this.eventEmitter.emit(PlantEventType.PLANT_STAGE_UPDATED, {
-            plantId: plant.id,
-            oldStage: "GROWING",
-            newStage: "HARVESTABLE",
-            timestamp: now,
-          });
-
-          updatedCount++;
-        }
-      }
-
-      this.logger.log(`Updated ${updatedCount} plant stages`);
+      this.logger.log(`Updated ${updatedCount} plant stages (Digging -> Growing)`);
       return { success: true, updatedCount };
     } catch (error) {
       this.logger.error(`Failed to update plant stages: ${error.message}`);
@@ -226,26 +192,10 @@ export class PlantProcessor {
           newStage = "GROWING";
           updated = true;
         }
-      } else if (
-        plant.stage === "GROWING" &&
-        !plant.isHarvestable &&
-        plant.growingStartedAt
-      ) {
-        const elapsedMs = now.getTime() - plant.growingStartedAt.getTime();
-        const elapsedSeconds = Math.floor(elapsedMs / 1000);
-
-        if (elapsedSeconds >= plant.growingDuration) {
-          await this.prisma.plant.update({
-            where: { id: plant.id },
-            data: {
-              stage: "HARVESTABLE",
-              isHarvestable: true,
-            },
-          });
-          newStage = "HARVESTABLE";
-          updated = true;
-        }
       }
+
+      // Note: GROWING -> HARVESTABLE is handled by PlantService (Hydration)
+      // We skip it here.
 
       if (updated) {
         this.eventEmitter.emit(PlantEventType.PLANT_STAGE_UPDATED, {
