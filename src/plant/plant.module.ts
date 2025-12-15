@@ -8,6 +8,7 @@ import { PlantService } from "./plant.service";
 import { SeedModule } from "../seed/seed.module";
 import { MissionModule } from "../mission/mission.module";
 import { SoulboundTokenModule } from "../soulbound-token/soulbound-token.module";
+import { InventoryModule } from "../inventory/inventory.module";
 import { PLANT_QUEUE } from "./queues/plant.queue.constants";
 import { PlantProcessor } from "./queues/plant.processor";
 import { PlantQueueService } from "./queues/plant.queue.service";
@@ -19,6 +20,7 @@ import { PlantScheduler } from "./schedulers/plant.scheduler";
     SeedModule,
     forwardRef(() => MissionModule),
     forwardRef(() => SoulboundTokenModule),
+    forwardRef(() => InventoryModule),
     BullModule.registerQueue({
       name: PLANT_QUEUE,
     }),
@@ -34,4 +36,4 @@ import { PlantScheduler } from "./schedulers/plant.scheduler";
   ],
   exports: [PlantService, PlantQueueService],
 })
-export class PlantModule {}
+export class PlantModule { }

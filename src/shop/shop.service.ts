@@ -27,7 +27,50 @@ export class ShopService {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly inventoryService: InventoryService
-  ) {}
+  ) { }
+
+  /**
+   * Claim free water (The Well) - 12h cooldown
+   */
+  async claimFreeWater(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+
+    const now = new Date();
+    const cooldownHours = 12;
+    // Check cooldown
+    if (user.lastFreeWaterAt) {
+      const nextClaimTime = new Date(user.lastFreeWaterAt.getTime() + cooldownHours * 60 * 60 * 1000);
+      if (now < nextClaimTime) {
+        throw new BadRequestException(`The Well is dry. Come back at ${nextClaimTime.toISOString()}`);
+      }
+    }
+
+    // Give Water
+    await this.inventoryService.addItem(userId, {
+      itemType: ITEM_TYPES.WATER,
+      amount: 1,
+    });
+
+    // Update User
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { lastFreeWaterAt: now },
+    });
+
+    return {
+      success: true,
+      message: "💧 Collected 1 Water Drop from The Well! (+3h Growth Time)",
+      item: ITEM_TYPES.WATER,
+      amount: 1,
+      nextClaimAt: new Date(now.getTime() + cooldownHours * 60 * 60 * 1000).toISOString(),
+    };
+  }
 
   async getGoldShop(userId: string) {
     const user = await this.prisma.user.findUnique({
@@ -46,14 +89,32 @@ export class ShopService {
 
     const catalog = this.goldItems.map((item) => {
       const key = item.key;
-      const limitInfo = limits[key] || {
+
+      const limitInfo = limits[key as GoldShopItemKey] || {
         purchased: 0,
         remaining: item.limitPerPeriod ?? null,
       };
-      const affordable = user.balanceGold >= item.priceGold;
+
+      let finalPrice = item.priceGold;
+
+      // Dynamic Pricing for Wishing Well Water
+      if (key === GoldShopItemKey.GROWTH_WATER) {
+        // Count = purchased
+        // 0 -> 50
+        // 1 -> 100
+        // 2 -> 200
+        const count = limitInfo.purchased;
+        if (count === 0) finalPrice = 50;
+        else if (count === 1) finalPrice = 100;
+        else if (count >= 2) finalPrice = 200;
+        // Note: item.priceGold in config is base (50), we override display here
+      }
+
+      const affordable = user.balanceGold >= finalPrice;
 
       return {
         ...item,
+        priceGold: finalPrice, // Override price
         affordable,
         limit: item.limitPerPeriod ?? null,
         purchased: limitInfo.purchased,
@@ -107,10 +168,29 @@ export class ShopService {
         }
       }
 
+      // Dynamic Pricing for Wishing Well Water
+      let finalPrice = config.priceGold;
+      if (config.key === GoldShopItemKey.GROWTH_WATER) {
+        const from = this.getPeriodStart(now, "DAY"); // Always DAY for water
+        const count = await tx.shopPurchase.count({
+          where: {
+            userId,
+            shopType: "GOLD",
+            itemKey: config.key,
+            createdAt: { gte: from },
+          },
+        });
+
+        if (count === 0) finalPrice = 50;
+        else if (count === 1) finalPrice = 100;
+        else if (count === 2) finalPrice = 200;
+        else finalPrice = 20000; // Should be blocked by limit, but safe fallback
+      }
+
       // Check gold balance
-      if (user.balanceGold < config.priceGold) {
+      if (user.balanceGold < finalPrice) {
         throw new BadRequestException(
-          `Not enough gold. Required ${config.priceGold}, you have ${user.balanceGold}`
+          `Not enough gold. Required ${finalPrice}, you have ${user.balanceGold}`
         );
       }
 
@@ -142,7 +222,7 @@ export class ShopService {
       // Deduct gold
       await tx.user.update({
         where: { id: userId },
-        data: { balanceGold: { decrement: config.priceGold } },
+        data: { balanceGold: { decrement: finalPrice } },
       });
 
       // Record purchase
@@ -155,13 +235,13 @@ export class ShopService {
         },
       });
 
-      return { record, newBalanceGold: user.balanceGold - config.priceGold };
+      return { record, newBalanceGold: user.balanceGold - finalPrice, finalPrice };
     });
 
     return {
       success: true,
       message: `Purchased ${config.name} successfully`,
-      item: config,
+      item: { ...config, priceGold: purchase.finalPrice },
       balanceGold: purchase.newBalanceGold,
       purchase: purchase.record,
     };

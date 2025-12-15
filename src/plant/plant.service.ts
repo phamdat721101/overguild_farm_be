@@ -11,11 +11,13 @@ import { PrismaClient } from "@prisma/client";
 import { SeedService } from "../seed/seed.service";
 import { MissionService } from "../mission/mission.service";
 import { SoulboundTokenService } from "../soulbound-token/soulbound-token.service";
+import { InventoryService } from "../inventory/inventory.service";
 import {
   PLANT_CONFIGS,
   PLANT_CONSTANTS,
   STAGE_THRESHOLDS,
 } from "../common/constants/game-config.constant";
+import { ITEM_TYPES } from "../inventory/constants/item-types";
 
 @Injectable()
 export class PlantService {
@@ -28,6 +30,8 @@ export class PlantService {
     private readonly missionService: MissionService,
     @Inject(forwardRef(() => SoulboundTokenService))
     private readonly soulboundTokenService: SoulboundTokenService,
+    @Inject(forwardRef(() => InventoryService))
+    private readonly inventoryService: InventoryService,
   ) { }
 
   /**
@@ -111,10 +115,12 @@ export class PlantService {
   }
 
   /**
-   * Water a plant (daily limit: 1 per day per user)
-   * ✅ LOGIC:
-   * - First water: No cooldown (lastInteractedAt was set to past on plant creation)
-   * - Subsequent waters: 1-hour cooldown + daily limit
+   * Water a plant (Consumes 1 WATER item = +3 Growth Hours)
+   * ✅ NEW LOGIC:
+   * - Requires "WATER" item in inventory.
+   * - Adds 3 hours to `waterBalance`.
+   * - Clears `witheredAt` if plant was withering.
+   * - No daily limit on applying water (can stack).
    */
   async waterPlant(plantId: string, watererId: string) {
     const plant = await this.prisma.plant.findUnique({
@@ -127,56 +133,60 @@ export class PlantService {
     }
 
     if (plant.stage === "DEAD") {
-      throw new BadRequestException("This plant has wilted. It cannot be revived.");
+      throw new BadRequestException("This plant has died. You must clear the land to plant again.");
     }
 
     if (plant.stage === "MATURE") {
       throw new BadRequestException("This plant is ready to harvest!");
     }
 
-    // ✅ Check daily water limit
-    const today = this.getToday();
-    const lastWaterDate = plant.lastWaterDate ? this.getToday(plant.lastWaterDate) : null;
-    const isNewDay = !lastWaterDate || lastWaterDate < today;
-
-    let dailyWaterCount = isNewDay ? 0 : plant.dailyWaterCount;
-
-    if (dailyWaterCount >= PLANT_CONSTANTS.DAILY_WATER_LIMIT) {
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      tomorrow.setHours(0, 0, 0, 0);
-
-      throw new BadRequestException(
-        `Daily water limit reached (${PLANT_CONSTANTS.DAILY_WATER_LIMIT}/day). Next water available at: ${tomorrow.toISOString()}`
-      );
+    // Check ownership (only owner can water for now, or maybe friends?)
+    if (plant.land.userId !== watererId) {
+      // For now, allow friend watering if implemented? Strict ownership for simplicity first.
+      // throw new BadRequestException("You can only water your own plants");
     }
 
-    // ✅ Check cooldown (automatically bypassed for first water due to past timestamp)
-    const oneHourAgo = new Date(Date.now() - PLANT_CONSTANTS.WATER_COOLDOWN_HOURS * 60 * 60 * 1000);
-    if (plant.lastInteractedAt > oneHourAgo) {
-      const nextWaterTime = new Date(
-        plant.lastInteractedAt.getTime() + PLANT_CONSTANTS.WATER_COOLDOWN_HOURS * 60 * 60 * 1000,
-      );
-      throw new BadRequestException(
-        `This plant was recently watered. Try again after ${nextWaterTime.toISOString()}`,
-      );
+    // Check if user has WATER item
+    const hasWater = await this.inventoryService.hasItemAmount(watererId, ITEM_TYPES.WATER, 1);
+    if (!hasWater) {
+      throw new BadRequestException("You don't have any Water Drops! Get more from The Well.");
     }
 
+    // Consume WATER item
+    await this.inventoryService.removeItem(watererId, {
+      itemType: ITEM_TYPES.WATER,
+      amount: 1,
+    });
+
+    // Update Plant
+    // 1 Drop = 3 Hours
+    const WATER_VALUE_HOURS = 3;
+
+    // If plant was withering (waterBalance <= 0), this revives it.
+    // We clear witheredAt.
+
+    const newWaterBalance = Math.max(0, plant.waterBalance) + WATER_VALUE_HOURS;
     const newWaterCount = plant.waterCount + 1;
     const newInteractions = plant.interactions + 1;
-    const newDailyWaterCount = dailyWaterCount + 1;
-    const oldStage = plant.stage;
-    const newStage = this.calculateStageFromWaters(newWaterCount);
+
+    // Calculate generic stage (visual mostly, as logic is now activeGrowthHours based)
+    // But we still track waterCount for legacy/achievements
+    const newStage = this.calculateStageFromWaters(newWaterCount); // Keep legacy stage calc for now or update?
+    // Actually, stage should depend on activeGrowthHours now. 
+    // But `calculateStageFromWaters` is based on counts. 
+    // Let's rely on Cron to update Stage based on hours. 
+    // But we can update stats here.
 
     const updatedPlant = await this.prisma.plant.update({
       where: { id: plantId },
       data: {
+        waterBalance: newWaterBalance,
+        witheredAt: null, // Clear withering status
         waterCount: newWaterCount,
         interactions: newInteractions,
-        dailyWaterCount: newDailyWaterCount,
-        lastWaterDate: new Date(),
-        lastInteractedAt: new Date(), // ✅ Update to current time (activates cooldown for next water)
-        stage: newStage,
+        lastInteractedAt: new Date(),
+        lastWateredAt: new Date(),
+        // waterBy: ... (add user to list)
       },
       include: { land: true },
     });
@@ -187,40 +197,25 @@ export class PlantService {
       this.logger.error(`Failed to track water mission: ${error.message}`);
     }
 
-    const stageChanged = oldStage !== newStage;
-    const nextStageInfo = this.getNextStageInfo(newStage, newWaterCount, plant.type);
-    const watersRemainingToday = PLANT_CONSTANTS.DAILY_WATER_LIMIT - newDailyWaterCount;
-
-    const isFirstWater = newWaterCount === 1;
-
     this.logger.log(
-      `User ${watererId} watered plant ${plantId} (${oldStage} → ${newStage}, ${newWaterCount} total, ${newDailyWaterCount}/${PLANT_CONSTANTS.DAILY_WATER_LIMIT} today, first: ${isFirstWater})`,
+      `User ${watererId} watered plant ${plantId}. Balance: ${newWaterBalance}h.`,
     );
 
     return {
       plant: updatedPlant,
-      stageChanged,
-      oldStage,
-      newStage,
-      waterCount: newWaterCount,
-      interactions: newInteractions,
-      isFirstWater, // ✅ NEW: Indicate if this was first water
-      dailyProgress: {
-        watersUsedToday: newDailyWaterCount,
-        watersRemainingToday,
-        dailyLimit: PLANT_CONSTANTS.DAILY_WATER_LIMIT,
-        resetsAt: this.getTomorrowMidnight().toISOString(),
-      },
-      ...nextStageInfo,
-      message: stageChanged
-        ? `🎉 Plant grew to ${nextStageInfo.currentStageVi} stage! (${watersRemainingToday} waters left today)`
-        : `💧 Plant watered! ${nextStageInfo.watersNeeded} more waters to ${nextStageInfo.nextStageVi}. (${watersRemainingToday} waters left today)`,
+      message: `💧 Added 3 hours of hydration! Plant is healthy. (Balance: ${newWaterBalance}h)`,
+      waterBalance: newWaterBalance,
+      withered: false,
     };
   }
 
   /**
    * Get user's garden with detailed plant info
    * ✅ OPTIMIZED: Batch update daily water counts to eliminate N+1 queries
+   */
+  /**
+   * Get user's garden with detailed plant info
+   * ✅ OPTIMIZED: Hydration System View
    */
   async getGarden(userId: string) {
     const lands = await this.prisma.land.findMany({
@@ -230,37 +225,6 @@ export class PlantService {
     });
 
     const now = new Date();
-    const today = this.getToday();
-    const plantsToResetIds: string[] = [];
-
-    // Identify plants needing reset
-    for (const land of lands) {
-      if (land.plant) {
-        const lastWaterDate = land.plant.lastWaterDate
-          ? this.getToday(land.plant.lastWaterDate)
-          : null;
-        const isNewDay = !lastWaterDate || lastWaterDate < today;
-
-        if (isNewDay && land.plant.dailyWaterCount > 0) {
-          plantsToResetIds.push(land.plant.id);
-          // Update in-memory object to reflect reset state immediately
-          land.plant.dailyWaterCount = 0;
-        }
-      }
-    }
-
-    // Batch update if needed
-    if (plantsToResetIds.length > 0) {
-      await this.prisma.plant.updateMany({
-        where: {
-          id: { in: plantsToResetIds },
-        },
-        data: {
-          dailyWaterCount: 0,
-        },
-      });
-      this.logger.log(`Batch reset daily water count for ${plantsToResetIds.length} plants`);
-    }
 
     return lands.map((land) => {
       if (!land.plant) {
@@ -277,55 +241,41 @@ export class PlantService {
       const plant = land.plant;
       const config = PLANT_CONFIGS[plant.type] || PLANT_CONFIGS.ALGAE;
 
-      // Calculate times
-      const plantedHoursAgo = (now.getTime() - plant.plantedAt.getTime()) / (1000 * 60 * 60);
-      const lastWateredHoursAgo =
-        (now.getTime() - plant.lastInteractedAt.getTime()) / (1000 * 60 * 60);
+      // Hydration Check
+      // We calculate predicted changes since last Cron to give real-time feel?
+      // For simplicity, we stick to DB values updated by Cron/Actions.
+      // But maybe we can show "Time until dry"?
 
-      // Wilt calculation
-      const wiltTime = new Date(
-        plant.lastInteractedAt.getTime() + PLANT_CONSTANTS.WILT_HOURS * 60 * 60 * 1000,
-      );
-      const hoursToWilt = Math.max(0, (wiltTime.getTime() - now.getTime()) / (1000 * 60 * 60));
-      const isWilting = hoursToWilt < 24;
-      const isCritical = hoursToWilt < 12;
-      const isDead = plant.stage === "DEAD" || hoursToWilt <= 0;
+      const waterBalance = plant.waterBalance; // Hours
+      const isWithering = waterBalance <= 0;
+      const witheredAt = plant.witheredAt;
+      let hoursToDeath = 0;
+      let isDead = plant.stage === "DEAD";
 
-      // ✅ Water cooldown calculation
-      const nextWaterTime = new Date(
-        plant.lastInteractedAt.getTime() + PLANT_CONSTANTS.WATER_COOLDOWN_HOURS * 60 * 60 * 1000,
-      );
-      const canWaterNow = now >= nextWaterTime && plant.dailyWaterCount < PLANT_CONSTANTS.DAILY_WATER_LIMIT;
-      const watersRemainingToday = Math.max(0, PLANT_CONSTANTS.DAILY_WATER_LIMIT - plant.dailyWaterCount);
+      if (isDead) {
+        hoursToDeath = 0;
+      } else if (isWithering && witheredAt) {
+        // Death in 72h from witheredAt
+        const deathTime = new Date(witheredAt.getTime() + 72 * 60 * 60 * 1000);
+        const msToDeath = deathTime.getTime() - now.getTime();
+        hoursToDeath = Math.max(0, Math.floor(msToDeath / (1000 * 60 * 60)));
 
-      // ✅ NEW: Check if this is first water
-      const isFirstWater = plant.waterCount === 0;
-      const hoursSinceLastWater = (now.getTime() - plant.lastInteractedAt.getTime()) / (1000 * 60 * 60);
-
-      // Stage info
-      const currentStageInfo = config.stages[plant.stage] || config.stages.SEED;
-      const nextStageInfo = this.getNextStageInfo(plant.stage, plant.waterCount, plant.type);
-
-      // Digging phase info (if applicable)
-      let diggingInfo = {};
-      if (plant.stage === "DIGGING" && plant.diggingStartedAt) {
-        const diggingElapsed =
-          (now.getTime() - plant.diggingStartedAt.getTime()) / (1000 * 60 * 60);
-        const diggingRemaining = Math.max(0, plant.diggingDuration - diggingElapsed);
-        const diggingProgress = Math.min(100, (diggingElapsed / plant.diggingDuration) * 100);
-
-        diggingInfo = {
-          phase: "DIGGING",
-          elapsed: Math.floor(diggingElapsed),
-          remaining: Math.ceil(diggingRemaining),
-          total: plant.diggingDuration,
-          progress: Math.floor(diggingProgress),
-          completesAt: new Date(
-            plant.diggingStartedAt.getTime() + plant.diggingDuration * 60 * 60 * 1000,
-          ).toISOString(),
-          isComplete: diggingRemaining <= 0,
-        };
+        if (msToDeath <= 0) {
+          isDead = true; // Technically should be updated by Cron, but display logic here
+        }
+      } else {
+        // Healthy
+        hoursToDeath = 72; // Default safe buffer or N/A
       }
+
+      const activeGrowthHours = plant.activeGrowthHours;
+      const totalHoursNeeded = config.totalHours;
+      const progress = Math.min(100, Math.floor((activeGrowthHours / totalHoursNeeded) * 100));
+
+      // Calculate anticipated harvest time if maintained healthy
+      const hoursRemaining = Math.max(0, totalHoursNeeded - activeGrowthHours);
+
+      const currentStageInfo = config.stages[plant.stage] || config.stages.SEED;
 
       return {
         landId: land.id,
@@ -338,71 +288,29 @@ export class PlantService {
           stage: plant.stage,
           stageName: currentStageInfo.nameVi,
           plantedAt: plant.plantedAt.toISOString(),
-          lastWateredAt: plant.lastInteractedAt.toISOString(),
-          waterCount: plant.waterCount,
-          interactions: plant.interactions,
-          age: {
-            hours: Math.floor(plantedHoursAgo),
-            days: Math.floor(plantedHoursAgo / 24),
-          },
-          isGoldBranch: plant.isGoldBranch,
+          lastWateredAt: plant.lastWateredAt ? plant.lastWateredAt.toISOString() : null,
+          waterBalance: plant.waterBalance,
         },
-        timeline: {
-          plantedAt: plant.plantedAt.toISOString(),
-          lastWateredAt: plant.lastInteractedAt.toISOString(),
-          hoursSincePlanted: Math.floor(plantedHoursAgo),
-          hoursSinceLastWater: Math.floor(hoursSinceLastWater), // ✅ NEW
-          estimatedHarvestAt:
-            plant.stage === "MATURE"
-              ? "Ready now!"
-              : new Date(
-                plant.plantedAt.getTime() + config.totalHours * 60 * 60 * 1000,
-              ).toISOString(),
+        hydration: {
+          status: isDead ? "DEAD" : isWithering ? "WITHERING" : "HEALTHY",
+          waterBalance: plant.waterBalance, // Hours of water left
+          message: isDead
+            ? "☠️ Plant died."
+            : isWithering
+              ? `⚠️ Withering! Dies in ~${hoursToDeath}h if not watered.`
+              : `💧 Hydrated (${plant.waterBalance}h remaining).`,
+          isDead,
+          isWithering,
+          hoursToDeath: isDead ? 0 : hoursToDeath,
         },
         growth: {
+          activeGrowthHours: plant.activeGrowthHours,
+          totalHoursNeeded: config.totalHours,
+          progress: progress,
+          hoursRemaining: hoursRemaining,
           currentStage: plant.stage,
-          currentStageName: currentStageInfo.nameVi,
-          nextStage: nextStageInfo.nextStage,
-          nextStageName: nextStageInfo.nextStageVi,
-          progress: nextStageInfo.progress,
-          watersNeeded: nextStageInfo.watersNeeded,
-          totalWaters: plant.waterCount,
-          waterTarget: nextStageInfo.waterTarget,
         },
-        digging: diggingInfo,
-        health: {
-          status: isDead ? "DEAD" : isCritical ? "CRITICAL" : isWilting ? "WILTING" : "HEALTHY",
-          hoursToWilt: isDead ? 0 : Math.floor(hoursToWilt),
-          isWilting,
-          isCritical,
-          wiltTime: isDead ? null : wiltTime.toISOString(),
-          message: isDead
-            ? "☠️ Plant has wilted and cannot be revived"
-            : isCritical
-              ? `⚠️ Critical: Plant will wilt in ${Math.floor(hoursToWilt)} hours!`
-              : isWilting
-                ? `⚠️ Warning: Plant will wilt in ${Math.floor(hoursToWilt)} hours`
-                : `💚 Healthy: ${Math.floor(hoursToWilt)} hours until wilt`,
-        },
-        watering: {
-          canWaterNow,
-          nextWaterTime: canWaterNow ? null : nextWaterTime.toISOString(),
-          cooldownHours: PLANT_CONSTANTS.WATER_COOLDOWN_HOURS,
-          dailyWaterCount: plant.dailyWaterCount,
-          dailyWaterLimit: PLANT_CONSTANTS.DAILY_WATER_LIMIT,
-          watersRemainingToday,
-          resetsAt: this.getTomorrowMidnight().toISOString(),
-          isFirstWater, // ✅ NEW: Indicate no waters yet
-          hoursSinceLastWater: Math.floor(hoursSinceLastWater), // ✅ NEW
-        },
-        status:
-          plant.stage === "MATURE"
-            ? "READY_TO_HARVEST"
-            : plant.stage === "DEAD"
-              ? "DEAD"
-              : plant.stage === "DIGGING"
-                ? "DIGGING"
-                : "GROWING",
+        status: plant.stage === "MATURE" ? "READY_TO_HARVEST" : isDead ? "DEAD" : "GROWING",
       };
     });
   }
@@ -558,19 +466,106 @@ export class PlantService {
   /**
    * Cron job: Auto-progress plants through phases
    */
+  /**
+   * Cron job: Auto-progress plants (Hourly)
+   * ✅ NEW LOGIC:
+   * 1. Consume 1 Hour of Water Balance.
+   * 2. If Water Balance > 0 -> Add 1 Hour to Active Growth.
+   * 3. If Water Balance <= 0 -> Mark witheredAt if not set.
+   * 4. Check Death: If witheredAt + 72h < now -> Kill plant (Burn).
+   * 5. Check Stage Upgrades based on Active Growth Hours.
+   */
   @Cron(CronExpression.EVERY_HOUR)
   async autoProgressPlants() {
     const plants = await this.prisma.plant.findMany({
       where: {
-        stage: { in: ["DIGGING", "GROWING"] },
+        stage: { notIn: ["DEAD", "MATURE"] },
       },
     });
 
+    const now = new Date();
+    let updatedCount = 0;
+
     for (const plant of plants) {
-      await this.checkGrowthCompletion(plant);
+      let { waterBalance, activeGrowthHours, witheredAt, stage } = plant;
+      let updates: any = {};
+      let stateChanged = false;
+
+      // 1. Consume Water logic
+      if (waterBalance > 0) {
+        waterBalance -= 1;
+        activeGrowthHours += 1;
+        updates.waterBalance = waterBalance;
+        updates.activeGrowthHours = activeGrowthHours;
+        stateChanged = true;
+
+        // Ensure witheredAt is cleared if it was set (should be cleared on water, but safety check)
+        if (witheredAt) {
+          updates.witheredAt = null;
+          witheredAt = null;
+        }
+
+        // Check Growth/Stage Logic
+        const newStage = this.calculateStageFromHours(activeGrowthHours, plant.type);
+        if (newStage && newStage !== stage) {
+          updates.stage = newStage;
+          if (newStage === "MATURE") {
+            updates.isHarvestable = true;
+          }
+        }
+
+      } else {
+        // Plant is drying/withered
+        if (!witheredAt) {
+          updates.witheredAt = now; // Start withering now
+          witheredAt = now;
+          stateChanged = true;
+        } else {
+          // Check Death
+          const deathTime = new Date(witheredAt.getTime() + 72 * 60 * 60 * 1000);
+          if (now > deathTime) {
+            updates.stage = "DEAD";
+            updates.fruitYield = 0; // Burn potential yield
+            stateChanged = true;
+            this.logger.log(`Plant ${plant.id} died due to lack of water.`);
+          }
+        }
+      }
+
+      if (stateChanged) {
+        await this.prisma.plant.update({
+          where: { id: plant.id },
+          data: updates,
+        });
+        updatedCount++;
+      }
     }
 
-    this.logger.log(`Auto-progressed ${plants.length} plants`);
+    this.logger.log(`Auto-progressed ${updatedCount} plants (Hydration cycle)`);
+  }
+
+  /**
+   * Calculate stage based on accumulated active growth hours
+   */
+  private calculateStageFromHours(hours: number, plantType: string): string | null {
+    const config = PLANT_CONFIGS[plantType] || PLANT_CONFIGS.ALGAE;
+
+    // Reverse check thresholds
+    // This requires config to have duration mapping or we infer it.
+    // Based on game-config:
+    // SPROUT: duration
+    // GROWING: duration
+    // BLOOM: duration
+    // FRUIT: duration
+
+    // Let's create accumulated thresholds from duration
+    let total = 0;
+    if (hours >= config.stages.FRUIT.duration) return "MATURE";
+    if (hours >= config.stages.BLOOM.duration) return "BLOOM";
+    if (hours >= config.stages.GROWING.duration) return "GROWING";
+    if (hours >= config.stages.SPROUT.duration) return "SPROUT";
+
+    return null;
   }
 
   private formatTimeRemaining(ms: number): string {

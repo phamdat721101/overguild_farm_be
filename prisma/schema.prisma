@@ -25,6 +25,7 @@ model User {
   balanceGold         Int                  @default(0) @map("balance_gold")
   balanceRuby         Int                  @default(0) @map("balance_ruby")
   balanceGem          Int                  @default(0) @map("balance_gem")
+  lastFreeWaterAt     DateTime?            @map("last_free_water_at") // ✅ Hydration: Last time user claimed free water
   dailyStreak         DailyStreak?
   inventoryItems      InventoryItem[]
   lands               Land[]
@@ -55,31 +56,37 @@ model Land {
 }
 
 model Plant {
-  id               String    @id @default(dbgenerated("gen_random_uuid()"))
-  landId           String    @unique @map("land_id")
-  type             String
-  stage            String    @default("DIGGING")
-  plantedAt        DateTime  @map("planted_at")
-  lastInteractedAt DateTime  @map("last_interacted_at")
-  diggingStartedAt DateTime? @map("digging_started_at")
-  diggingDuration  Int       @default(0) @map("digging_duration")
-  diggingCompleted Boolean   @default(false) @map("digging_completed")
-  growingStartedAt DateTime? @map("growing_started_at")
-  growingDuration  Int       @default(0) @map("growing_duration")
-  interactions     Int       @default(0)
-  waterCount       Int       @default(0) @map("water_count")
-  wateredBy        String[]  @default([]) @map("watered_by")
-  lastWateredAt    DateTime? @map("last_watered_at")
-  githubCommits    Int       @default(0) @map("github_commits")
-  isGoldBranch     Boolean   @default(false) @map("is_gold_branch")
-  isHarvestable    Boolean   @default(false) @map("is_harvestable")
-  harvestedAt      DateTime? @map("harvested_at")
-  fruitYield       Int       @default(0) @map("fruit_yield")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
-  dailyWaterCount  Int       @default(0) @map("daily_water_count")
-  lastWaterDate    DateTime? @map("last_water_date")
-  land             Land      @relation(fields: [landId], references: [id], onDelete: Cascade)
+  id                String    @id @default(dbgenerated("gen_random_uuid()"))
+  landId            String    @unique @map("land_id")
+  type              String
+  stage             String    @default("DIGGING")
+  plantedAt         DateTime  @map("planted_at")
+  lastInteractedAt  DateTime  @map("last_interacted_at")
+  diggingStartedAt  DateTime? @map("digging_started_at")
+  diggingDuration   Int       @default(0) @map("digging_duration")
+  diggingCompleted  Boolean   @default(false) @map("digging_completed")
+  growingStartedAt  DateTime? @map("growing_started_at")
+  growingDuration   Int       @default(0) @map("growing_duration")
+  interactions      Int       @default(0)
+  waterCount        Int       @default(0) @map("water_count")
+  wateredBy         String[]  @default([]) @map("watered_by")
+  lastWateredAt     DateTime? @map("last_watered_at")
+  githubCommits     Int       @default(0) @map("github_commits")
+  isGoldBranch      Boolean   @default(false) @map("is_gold_branch")
+  isHarvestable     Boolean   @default(false) @map("is_harvestable")
+  harvestedAt       DateTime? @map("harvested_at")
+  fruitYield        Int       @default(0) @map("fruit_yield")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  dailyWaterCount   Int       @default(0) @map("daily_water_count")
+  lastWaterDate     DateTime? @map("last_water_date")
+  
+  // ✅ Hydration System
+  waterBalance      Int       @default(0) @map("water_balance") // Hours of water remaining (1 drop = 3h)
+  activeGrowthHours Int       @default(0) @map("active_growth_hours") // Total hours grown while healthy
+  witheredAt        DateTime? @map("withered_at") // When water ran out
+  
+  land              Land      @relation(fields: [landId], references: [id], onDelete: Cascade)
 
   @@index([landId])
   @@index([lastWaterDate])

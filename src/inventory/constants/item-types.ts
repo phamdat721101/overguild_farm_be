@@ -232,7 +232,7 @@ export const ITEM_REGISTRY: Record<string, ItemMetadata> = {
     category: "CONSUMABLES",
     icon: "💧",
     description:
-      "Used to water plants. Receive daily from check-ins. Each water adds +0.5 bonus fruit at harvest.",
+      "Used to water plants. Each water drop provides 3 hours of growth time.",
   },
 
   // ✅ NEW: Vietnamese streak items

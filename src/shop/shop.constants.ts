@@ -132,6 +132,16 @@ export const GOLD_SHOP_ITEMS: GoldShopItemConfig[] = [
       amount: 1,
     },
   },
+  // Wishing Well Items (Water)
+  {
+    key: GoldShopItemKey.GROWTH_WATER, // Reusing key but changing logic/price if needed
+    name: "Water Drop (Wishing Well)",
+    description: "1 Water Drop (3h Growth). Max 3/day. Level 5+ required.",
+    priceGold: 50,
+    period: "DAY",
+    limitPerPeriod: 3, // Logic for price scaling (50->100->200) will be in Service
+    icon: "💧",
+  },
 ];
 
 // Gem Shop Items
