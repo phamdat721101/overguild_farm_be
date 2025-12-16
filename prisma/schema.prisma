@@ -36,6 +36,10 @@ model User {
   shopPurchases       ShopPurchase[]
   soulboundTokens     SoulboundToken[]
   streakCheckins      StreakCheckin[]
+  
+  referrerId          String?              @map("referrer_id")
+  referrer            User?                @relation("Referrals", fields: [referrerId], references: [id])
+  referrals           User[]               @relation("Referrals")
 
   @@map("users")
 }

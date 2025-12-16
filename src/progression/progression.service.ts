@@ -61,13 +61,13 @@ export class ProgressionService {
     },
   ];
 
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(private readonly prisma: PrismaClient) { }
 
   private getLevelConfig(level: number): LevelConfig | undefined {
     return this.LEVEL_CONFIGS.find((cfg) => cfg.level === level);
   }
 
-  private getCurrentLevelFromXp(xp: number): LevelConfig {
+  public getCurrentLevelFromXp(xp: number): LevelConfig {
     // Lấy config level cao nhất mà requiredXp <= xp
     let current = this.LEVEL_CONFIGS[0];
     for (const cfg of this.LEVEL_CONFIGS) {

@@ -50,7 +50,7 @@ export class MissionService {
       reward: {
         xp: 10,
         reputation: 5,
-        items: [{ type: "SEED_COMMON", amount: 1 }],
+        items: [{ type: "WATER", amount: 1 }],
       },
       resetPeriod: "daily",
     },
@@ -104,7 +104,7 @@ export class MissionService {
     private readonly prisma: PrismaClient,
     @Inject(forwardRef(() => SoulboundTokenService))
     private readonly soulboundTokenService: SoulboundTokenService,
-  ) {}
+  ) { }
 
   /**
    * Initialize daily missions for a user

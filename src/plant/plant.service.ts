@@ -93,8 +93,34 @@ export class PlantService {
 
     try {
       await this.soulboundTokenService.checkAndIssueBadges(userId);
+
+      // ✅ REFERRAL BONUS CHECK
+      // Invite friend (Friend finishes planting Algae) -> Receive 5 Drops (Only applicable in first 72h of account opening).
+      // Assuming "ALGAE" is the type string.
+      if (seedType === "ALGAE") {
+        const user = await this.prisma.user.findUnique({
+          where: { id: userId },
+          select: { id: true, createdAt: true, referrerId: true },
+        });
+
+        if (user && user.referrerId) {
+          const nowMs = new Date().getTime();
+          const joinedMs = user.createdAt.getTime();
+          const hoursSinceJoin = (nowMs - joinedMs) / (1000 * 60 * 60);
+
+          if (hoursSinceJoin <= 72) {
+            // Give 5 Water to Referrer
+            await this.inventoryService.addItem(user.referrerId, {
+              itemType: ITEM_TYPES.WATER,
+              amount: 5
+            });
+            this.logger.log(`Referral Bonus: User ${userId} planted Algae. Sent 5 Water to referrer ${user.referrerId}`);
+          }
+        }
+      }
+
     } catch (error) {
-      this.logger.error(`Failed to check badges: ${error.message}`);
+      this.logger.error(`Failed to process side effects (badges/referrals): ${error.message}`);
     }
 
     return {

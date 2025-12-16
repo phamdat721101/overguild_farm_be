@@ -17,7 +17,14 @@ import { CashShopPurchaseDto } from "./dto/cash-shop-purchase.dto";
 @UseGuards(JwtAuthGuard)
 @Controller("shop")
 export class ShopController {
-  constructor(private readonly shopService: ShopService) {}
+  constructor(private readonly shopService: ShopService) { }
+
+  @Post("water/free")
+  @ApiOperation({ summary: "Claim free water (The Well)" })
+  @ApiResponse({ status: 200, description: "Water claimed successfully" })
+  claimFreeWater(@CurrentUser() user: any) {
+    return this.shopService.claimFreeWater(user.sub);
+  }
 
   @Get("gold")
   @ApiOperation({ summary: "Get Gold Shop catalog and current gold balance" })

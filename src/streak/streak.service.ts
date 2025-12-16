@@ -19,6 +19,7 @@ import {
   RewardDto,
   ItemRewardDto,
 } from "./dto/streak-response.dto";
+import { MissionService } from "../mission/mission.service"; // Import
 
 @Injectable()
 export class StreakService {
@@ -26,8 +27,9 @@ export class StreakService {
 
   constructor(
     private readonly prisma: PrismaClient,
-    private readonly inventoryService: InventoryService
-  ) {}
+    private readonly inventoryService: InventoryService,
+    private readonly missionService: MissionService // Inject
+  ) { }
 
   canCheckinNow(lastCheckinAt: Date | null, currentStreak: number): boolean {
     if (!lastCheckinAt) return true;
@@ -288,6 +290,13 @@ export class StreakService {
     // ✅ UPDATED: Vietnamese message with day name
     const dayNames = ["", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ Nhật"];
     const dayName = dayNames[streakDay];
+
+    // Trigger Mission Checkin
+    try {
+      await this.missionService.trackEventCheckIn(userId, new Date());
+    } catch (e) {
+      this.logger.error("Failed to track checkin mission", e);
+    }
 
     return {
       success: true,

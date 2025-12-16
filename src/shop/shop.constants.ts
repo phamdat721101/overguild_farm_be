@@ -99,15 +99,7 @@ export const GOLD_SHOP_ITEMS: GoldShopItemConfig[] = [
     priceGold: 30,
     icon: "🧤",
   },
-  {
-    key: GoldShopItemKey.GROWTH_WATER,
-    name: "Growth Water",
-    description: "Special water that helps plants grow faster (-1h, 1/day)",
-    priceGold: 100,
-    period: "DAY",
-    limitPerPeriod: 1,
-    icon: "💧",
-  },
+
   {
     key: GoldShopItemKey.FISH_FOOD,
     name: "Fish Food",

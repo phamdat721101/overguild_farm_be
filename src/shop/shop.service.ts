@@ -6,6 +6,7 @@ import {
 import { PrismaClient } from "@prisma/client";
 import { InventoryService } from "../inventory/inventory.service";
 import { ITEM_TYPES } from "../inventory/constants/item-types";
+import { ProgressionService } from "../progression/progression.service";
 import {
   GOLD_SHOP_ITEMS,
   GEM_SHOP_ITEMS,
@@ -26,7 +27,8 @@ export class ShopService {
 
   constructor(
     private readonly prisma: PrismaClient,
-    private readonly inventoryService: InventoryService
+    private readonly inventoryService: InventoryService,
+    private readonly progressionService: ProgressionService
   ) { }
 
   /**
@@ -142,7 +144,7 @@ export class ShopService {
     const purchase = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.findUnique({
         where: { id: userId },
-        select: { id: true, balanceGold: true },
+        select: { id: true, balanceGold: true, xp: true },
       });
 
       if (!user) {
@@ -171,6 +173,12 @@ export class ShopService {
       // Dynamic Pricing for Wishing Well Water
       let finalPrice = config.priceGold;
       if (config.key === GoldShopItemKey.GROWTH_WATER) {
+        // Requirement: Level 5+
+        const levelConfig = this.progressionService.getCurrentLevelFromXp(user.xp);
+        if (levelConfig.level < 5) {
+          throw new BadRequestException("Wishing Well requires Level 5+");
+        }
+
         const from = this.getPeriodStart(now, "DAY"); // Always DAY for water
         const count = await tx.shopPurchase.count({
           where: {

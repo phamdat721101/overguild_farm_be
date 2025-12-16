@@ -5,11 +5,12 @@ import { StreakController } from "./streak.controller";
 import { StreakService } from "./streak.service";
 import { StreakScheduler } from "./streak.scheduler";
 import { InventoryModule } from "../inventory/inventory.module";
+import { MissionModule } from "../mission/mission.module";
 
 @Module({
-  imports: [ScheduleModule.forRoot(), InventoryModule],
+  imports: [ScheduleModule.forRoot(), InventoryModule, MissionModule],
   controllers: [StreakController],
   providers: [StreakService, StreakScheduler, PrismaClient],
   exports: [StreakService],
 })
-export class StreakModule {}
+export class StreakModule { }
