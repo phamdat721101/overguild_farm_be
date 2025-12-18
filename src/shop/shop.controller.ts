@@ -19,6 +19,13 @@ import { CashShopPurchaseDto } from "./dto/cash-shop-purchase.dto";
 export class ShopController {
   constructor(private readonly shopService: ShopService) { }
 
+  @Get("water/status")
+  @ApiOperation({ summary: "Get status of free water claim" })
+  @ApiResponse({ status: 200, description: "Returns claim status including next claim time" })
+  getFreeWaterStatus(@CurrentUser() user: any) {
+    return this.shopService.getFreeWaterStatus(user.sub);
+  }
+
   @Post("water/free")
   @ApiOperation({ summary: "Claim free water (The Well)" })
   @ApiResponse({ status: 200, description: "Water claimed successfully" })

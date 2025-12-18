@@ -24,6 +24,7 @@ export class ShopService {
   private readonly goldItems = GOLD_SHOP_ITEMS;
   private readonly gemItems = GEM_SHOP_ITEMS;
   private readonly cashItems = CASH_SHOP_ITEMS;
+  private readonly WATER_COOLDOWN_HOURS = 12;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -44,10 +45,9 @@ export class ShopService {
     }
 
     const now = new Date();
-    const cooldownHours = 12;
     // Check cooldown
     if (user.lastFreeWaterAt) {
-      const nextClaimTime = new Date(user.lastFreeWaterAt.getTime() + cooldownHours * 60 * 60 * 1000);
+      const nextClaimTime = new Date(user.lastFreeWaterAt.getTime() + this.WATER_COOLDOWN_HOURS * 60 * 60 * 1000);
       if (now < nextClaimTime) {
         throw new BadRequestException(`The Well is dry. Come back at ${nextClaimTime.toISOString()}`);
       }
@@ -70,7 +70,38 @@ export class ShopService {
       message: "💧 Collected 1 Water Drop from The Well! (+3h Growth Time)",
       item: ITEM_TYPES.WATER,
       amount: 1,
-      nextClaimAt: new Date(now.getTime() + cooldownHours * 60 * 60 * 1000).toISOString(),
+      nextClaimAt: new Date(now.getTime() + this.WATER_COOLDOWN_HOURS * 60 * 60 * 1000).toISOString(),
+    };
+  }
+
+  async getFreeWaterStatus(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { lastFreeWaterAt: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+
+    const now = new Date();
+    let nextClaimTime = now;
+    let isReady = true;
+
+    if (user.lastFreeWaterAt) {
+      nextClaimTime = new Date(user.lastFreeWaterAt.getTime() + this.WATER_COOLDOWN_HOURS * 60 * 60 * 1000);
+      if (now < nextClaimTime) {
+        isReady = false;
+      } else {
+        // If ready, next claim is effectively now (or immediately available)
+        nextClaimTime = now;
+      }
+    }
+
+    return {
+      isReady,
+      nextClaimAt: isReady ? now.toISOString() : nextClaimTime.toISOString(),
+      lastClaimedAt: user.lastFreeWaterAt ? user.lastFreeWaterAt.toISOString() : null,
     };
   }
 
