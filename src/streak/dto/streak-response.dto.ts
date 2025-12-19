@@ -22,7 +22,7 @@ export class RewardDto {
   gold: number;
 
   @ApiProperty({ example: 0 })
-  ruby: number;
+  gem: number;
 
   @ApiProperty({ type: [ItemRewardDto] })
   items: ItemRewardDto[];

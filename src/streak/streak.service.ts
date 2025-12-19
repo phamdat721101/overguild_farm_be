@@ -119,7 +119,7 @@ export class StreakService {
 
     return {
       gold: reward.gold,
-      ruby: reward.ruby,
+      gem: reward.gem,
       items: enrichedItems,
     };
   }
@@ -164,12 +164,12 @@ export class StreakService {
   async distributeRewards(userId: string, rewards: RewardDto): Promise<void> {
     try {
       await this.prisma.$transaction(async (tx) => {
-        if (rewards.gold > 0 || rewards.ruby > 0) {
+        if (rewards.gold > 0 || rewards.gem > 0) {
           await tx.user.update({
             where: { id: userId },
             data: {
               balanceGold: { increment: rewards.gold },
-              balanceRuby: { increment: rewards.ruby },
+              balanceGem: { increment: rewards.gem },
             },
           });
         }
@@ -184,7 +184,7 @@ export class StreakService {
       });
 
       this.logger.log(
-        `Distributed rewards to user ${userId}: ${rewards.gold} gold, ${rewards.ruby} ruby, ${rewards.items.length} items`
+        `Distributed rewards to user ${userId}: ${rewards.gold} gold, ${rewards.gem} gem, ${rewards.items.length} items`
       );
     } catch (error) {
       this.logger.error(

@@ -49,6 +49,10 @@ export type BaseShopItemConfig = {
 export type GoldShopItemConfig = BaseShopItemConfig & {
   key: GoldShopItemKey;
   priceGold: number;
+  reward?: {
+    itemType: string;
+    amount: number;
+  };
   exchangeRequirement?: {
     itemType: string;
     amount: number;
@@ -91,6 +95,10 @@ export const GOLD_SHOP_ITEMS: GoldShopItemConfig[] = [
     period: "WEEK",
     limitPerPeriod: 1,
     icon: "🪓",
+    reward: {
+      itemType: "SHOVEL",
+      amount: 1,
+    },
   },
   {
     key: GoldShopItemKey.BUG_GLOVE,
@@ -98,14 +106,34 @@ export const GOLD_SHOP_ITEMS: GoldShopItemConfig[] = [
     description: "Special gloves for catching bugs",
     priceGold: 30,
     icon: "🧤",
+    reward: {
+      itemType: "BUG_GLOVE",
+      amount: 1,
+    },
   },
-
+  {
+    key: GoldShopItemKey.GROWTH_WATER,
+    name: "Growth Water",
+    description: "Special water that helps plants grow faster (-1h, 1/day)",
+    priceGold: 100,
+    period: "DAY",
+    limitPerPeriod: 1,
+    icon: "💧",
+    reward: {
+      itemType: "GROWTH_WATER",
+      amount: 1,
+    },
+  },
   {
     key: GoldShopItemKey.FISH_FOOD,
     name: "Fish Food",
     description: "Food for aquatic ecosystem",
     priceGold: 20,
     icon: "🐟",
+    reward: {
+      itemType: "FISH_FOOD",
+      amount: 1,
+    },
   },
   {
     key: GoldShopItemKey.EXCHANGE_SPORE_MUSHROOM,
@@ -123,16 +151,6 @@ export const GOLD_SHOP_ITEMS: GoldShopItemConfig[] = [
       itemType: "FRUIT_MUSHROOM",
       amount: 1,
     },
-  },
-  // Wishing Well Items (Water)
-  {
-    key: GoldShopItemKey.GROWTH_WATER, // Reusing key but changing logic/price if needed
-    name: "Water Drop (Wishing Well)",
-    description: "1 Water Drop (3h Growth). Max 3/day. Level 5+ required.",
-    priceGold: 50,
-    period: "DAY",
-    limitPerPeriod: 3, // Logic for price scaling (50->100->200) will be in Service
-    icon: "💧",
   },
 ];
 

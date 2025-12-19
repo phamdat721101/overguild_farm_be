@@ -63,19 +63,33 @@ Backend service for OverGuild - A Web3 GameFi platform where users grow virtual 
 | **Latest iPhone**   | 150 Trees / 3000 Mushrooms / 6000 Spores   |
 | **1 Seed NFT**      | _5000 Mushrooms / 10000 Spores_ (no Trees) |
 
-### 🛒 Gold Shop
+### 🛒 Multi-Currency Shop System
 
 - **Gold Currency** - Uses `balanceGold` from the user profile as soft currency
+- **Gem Currency** - Premium currency for special items
 - **Weekly / Daily Limits** - Some items have per-day or per-week purchase caps
-- **Mushroom Spore Exchange** - Convert Algae Spores into Mushrooms via the shop
+- **The Well** - Free water claim every 24 hours
+
+#### Gold Shop Items
 
 | Item                    | Price / Requirement                                                  | Limit     |
 | ----------------------- | -------------------------------------------------------------------- | --------- |
 | **Shovel**              | 500 Gold                                                             | 1 / week  |
 | **Bug Catch Glove**     | 30 Gold                                                              | Unlimited |
-| **Growth Water**        | 100 Gold                                                             | 1 / day   |
+| **Growth Water**        | 50 Gold (Level 5+ required)                                          | 1 / day   |
 | **Fish Food**           | 20 Gold                                                              | Unlimited |
 | **Mushroom Spore Swap** | 0 Gold + 5x Algae Spore (FRUIT_ALGAE) → 1x Mushroom (FRUIT_MUSHROOM) | 2 / week  |
+
+#### Currency Management
+
+```bash
+# Add currency to user
+POST /user/currency
+{
+  "currency": "GOLD",  # or "GEM"
+  "amount": 100       # positive = add, negative = subtract
+}
+```
 
 ### 📍 Event Check-in (Location Service)
 
@@ -289,6 +303,7 @@ POST /auth/login                           # Login with wallet address
 GET   /user/profile      # Get current user profile
 PATCH /user/profile      # Update profile
 GET   /user/qr           # Get QR code data
+POST  /user/currency     # Add/subtract GOLD or GEM
 ```
 
 #### Events (Location Service)
@@ -314,6 +329,12 @@ GET    /inventory/check/:type/:amt   # Check item availability
 ```http
 GET  /shop/gold           # Get Gold Shop catalog and current gold balance
 POST /shop/gold/purchase  # Purchase an item from the Gold Shop
+GET  /shop/gem            # Get Gem Shop catalog
+POST /shop/gem/purchase   # Purchase from Gem Shop
+GET  /shop/cash           # Get Cash Shop catalog
+POST /shop/cash/purchase  # Purchase from Cash Shop (requires payment)
+GET  /shop/well/status    # Check free water claim status
+POST /shop/well/claim     # Claim free water (The Well)
 ```
 
 #### Phygital Exchange
@@ -373,6 +394,40 @@ Response:
   "message": "User with this wallet address already exists"
 }
 ```
+
+### Example: Add Currency
+
+```bash
+curl -X POST http://localhost:3000/user/currency \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "currency": "GOLD",
+    "amount": 100
+  }'
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "currency": "GOLD",
+  "previousBalance": 50,
+  "amount": 100,
+  "newBalance": 150,
+  "balances": {
+    "gold": 150,
+    "gem": 0,
+  }
+}
+```
+
+**Supported currencies**: `GOLD`, `GEM`
+
+**Notes**:
+- Positive amount = add currency
+- Negative amount = subtract currency (cannot go below 0)
 
 ### Example: Login Flow
 
@@ -463,6 +518,59 @@ Response:
   }
 ]
 ```
+
+### Example: Gold Shop Purchase
+
+```bash
+# 1. Check available items
+curl -X GET http://localhost:3000/shop/gold \
+  -H "Authorization: Bearer $TOKEN"
+
+# 2. Buy FISH_FOOD (costs 20 gold)
+curl -X POST http://localhost:3000/shop/gold/purchase \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"itemKey": "FISH_FOOD"}'
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "message": "Purchased Fish Food successfully",
+  "item": {
+    "key": "FISH_FOOD",
+    "name": "Fish Food",
+    "description": "Food for aquatic ecosystem",
+    "priceGold": 20,
+    "icon": "🐟",
+    "reward": {
+      "itemType": "FISH_FOOD",
+      "amount": 1
+    }
+  },
+  "balanceGold": 160,
+  "purchase": {
+    "id": "uuid",
+    "userId": "user-uuid",
+    "shopType": "GOLD",
+    "itemKey": "FISH_FOOD",
+    "quantity": 1,
+    "createdAt": "2025-12-18T17:30:30.096Z"
+  }
+}
+```
+
+**Gold Shop Items**:
+
+| Item | Price | Description |
+|------|-------|-------------|
+| 🪓 SHOVEL | 500 gold | Digging tool |
+| 🧤 BUG_GLOVE | 30 gold | Bug catching gloves |
+| 💧 GROWTH_WATER | 50 gold | Requires Level 5+ |
+| 🐟 FISH_FOOD | 20 gold | Fish food |
+| 🍄 EXCHANGE_SPORE_MUSHROOM | 0 gold | Exchange 5 Algae Spores → 1 Mushroom |
 
 ### Example: Phygital Exchange
 

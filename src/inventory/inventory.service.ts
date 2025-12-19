@@ -108,10 +108,20 @@ export class InventoryService {
     return summary;
   }
 
+  // Currency items that should NOT be in inventory (use user.balanceGold/Gem instead)
+  private readonly BLOCKED_CURRENCY_ITEMS = ["GOLD", "GEM"];
+
   /**
    * Add item to inventory (admin/system use)
    */
   async addItem(userId: string, dto: AddItemDto) {
+    // ❌ Block currency items - these should be on User model
+    if (this.BLOCKED_CURRENCY_ITEMS.includes(dto.itemType.toUpperCase())) {
+      throw new BadRequestException(
+        `${dto.itemType} is a currency and cannot be added to inventory. Use user.balanceGold/balanceGem instead.`
+      );
+    }
+
     const item = await this.prisma.inventoryItem.upsert({
       where: {
         userId_itemType: { userId, itemType: dto.itemType },

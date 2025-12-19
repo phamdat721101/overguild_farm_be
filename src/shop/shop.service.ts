@@ -233,6 +233,23 @@ export class ShopService {
         );
       }
 
+      // Add item to inventory if reward is defined (use tx for transaction consistency)
+      if (config.reward?.itemType && config.reward?.amount) {
+        await tx.inventoryItem.upsert({
+          where: {
+            userId_itemType: { userId, itemType: config.reward.itemType },
+          },
+          create: {
+            userId,
+            itemType: config.reward.itemType,
+            amount: config.reward.amount,
+          },
+          update: {
+            amount: { increment: config.reward.amount },
+          },
+        });
+      }
+
       // Handle special exchange item
       if (config.key === GoldShopItemKey.EXCHANGE_SPORE_MUSHROOM) {
         // Require 5 FRUIT_ALGAE -> give 1 FRUIT_MUSHROOM

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Patch, Post, UseGuards } from "@nestjs/common";
 import {
   ApiTags,
   ApiOperation,
@@ -9,6 +9,7 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { UserService } from "./user.service";
 import { UpdateProfileDto } from "./dto/update-profile.dto";
+import { AddCurrencyDto } from "./dto/add-currency.dto";
 
 @ApiTags("User")
 @ApiBearerAuth("JWT-auth")
@@ -35,8 +36,8 @@ export class UserController {
         discord: null,
         xp: 150,
         reputationScore: 20,
-        balanceRuby: 100,
         balanceGold: 50,
+        balanceGem: 100,
         createdAt: "2025-11-26T15:48:58.844Z",
         updatedAt: "2025-11-26T15:48:58.844Z",
         lands: [],
@@ -89,8 +90,8 @@ export class UserController {
         discord: "username#1234",
         xp: 150,
         reputationScore: 20,
-        balanceRuby: 100,
         balanceGold: 50,
+        balanceGem: 100,
         createdAt: "2025-11-26T15:48:58.844Z",
         updatedAt: "2025-11-27T19:00:00.000Z",
       },
@@ -130,5 +131,36 @@ export class UserController {
       walletAddress: user.walletAddress,
       qrData: `overguild://user/${user.sub}`,
     };
+  }
+
+  @Post("currency")
+  @ApiOperation({
+    summary: "Add or subtract currency from user balance",
+    description:
+      "Add (positive amount) or subtract (negative amount) GOLD or GEM. Cannot go below 0.",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Currency updated successfully",
+    schema: {
+      example: {
+        success: true,
+        currency: "GOLD",
+        previousBalance: 0,
+        amount: 100,
+        newBalance: 100,
+        balances: {
+          gold: 100,
+          gem: 0,
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: "Insufficient balance or invalid input",
+  })
+  addCurrency(@CurrentUser() user: any, @Body() dto: AddCurrencyDto) {
+    return this.userService.addCurrency(user.sub, dto);
   }
 }

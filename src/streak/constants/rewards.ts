@@ -5,7 +5,7 @@ export interface ItemReward {
 
 export interface DailyReward {
   gold: number;
-  ruby: number;
+  gem: number;
   items: ItemReward[];
 }
 
@@ -14,43 +14,43 @@ export const STREAK_REWARDS: Record<number, DailyReward> = {
   1: {
     // Thứ 2 (Monday)
     gold: 100,
-    ruby: 0,
+    gem: 0,
     items: [],
   },
   2: {
     // Thứ 3 (Tuesday)
     gold: 0,
-    ruby: 0,
+    gem: 0,
     items: [{ itemType: "BUG_GLOVE", amount: 1 }], // Găng Tay Bắt Sâu
   },
   3: {
     // Thứ 4 (Wednesday)
     gold: 0,
-    ruby: 0,
-    items: [{ itemType: "GEM", amount: 20 }], // 20 Gem
+    gem: 20,
+    items: [], // Gem as currency, not inventory
   },
   4: {
     // Thứ 5 (Thursday)
     gold: 0,
-    ruby: 0,
+    gem: 0,
     items: [{ itemType: "SEED_ALGAE", amount: 2 }], // 2 Mầm Tảo
   },
   5: {
     // Thứ 6 (Friday)
     gold: 0,
-    ruby: 0,
+    gem: 0,
     items: [{ itemType: "PESTICIDE", amount: 1 }], // Thuốc Trừ Sâu
   },
   6: {
     // Thứ 7 (Saturday)
     gold: 200,
-    ruby: 0,
+    gem: 0,
     items: [],
   },
   7: {
     // CN (Sunday)
     gold: 0,
-    ruby: 0,
+    gem: 0,
     items: [{ itemType: "SEED_MUSHROOM", amount: 1 }], // Bào Tử Nấm
   },
 };

@@ -21,9 +21,8 @@ export const ITEM_TYPES = {
   FERTILIZER_EPIC: "FERTILIZER_EPIC",
   FERTILIZER_LEGENDARY: "FERTILIZER_LEGENDARY",
 
-  // Currency
-  GOLD: "GOLD",
-  GEM: "GEM",
+  // ❌ Currency moved to User model (balanceGold, balanceGem)
+  // Do NOT add GOLD/GEM to inventory - use user.balanceGold/balanceGem instead
 
   // Reward boxes
   REWARD_BOX: "REWARD_BOX",
@@ -43,6 +42,11 @@ export const ITEM_TYPES = {
   // ✅ NEW: Streak reward items
   BUG_GLOVE: "BUG_GLOVE",
   PESTICIDE: "PESTICIDE",
+
+  // ✅ Shop Items
+  SHOVEL: "SHOVEL",
+  GROWTH_WATER: "GROWTH_WATER",
+  FISH_FOOD: "FISH_FOOD",
 } as const;
 
 export type ItemType = (typeof ITEM_TYPES)[keyof typeof ITEM_TYPES];
@@ -161,21 +165,8 @@ export const ITEM_REGISTRY: Record<string, ItemMetadata> = {
     description: "Legendary fertilizer that boosts plant growth by 5 levels",
   },
 
-  // Currency
-  [ITEM_TYPES.GOLD]: {
-    name: "Gold",
-    rarity: RARITY.COMMON,
-    category: "CURRENCY",
-    icon: "🪙",
-    description: "In-game currency for marketplace trades.",
-  },
-  [ITEM_TYPES.GEM]: {
-    name: "Gem",
-    rarity: RARITY.EPIC,
-    category: "CURRENCY",
-    icon: "💎",
-    description: "Premium currency for special items and boosts.",
-  },
+  // ❌ Currency (GOLD, GEM) are on User model, NOT in inventory
+  // Use user.balanceGold, user.balanceGem instead
 
   // Reward boxes
   [ITEM_TYPES.REWARD_BOX]: {
@@ -249,6 +240,29 @@ export const ITEM_REGISTRY: Record<string, ItemMetadata> = {
     category: "FERTILIZERS",
     icon: "🧪",
     description: "Thuốc diệt sâu bệnh hiệu quả cho cây trồng",
+  },
+
+  // ✅ Shop Items
+  [ITEM_TYPES.SHOVEL]: {
+    name: "Shovel",
+    rarity: RARITY.COMMON,
+    category: "TOOLS",
+    icon: "🪓",
+    description: "Professional digging tool for farming",
+  },
+  [ITEM_TYPES.GROWTH_WATER]: {
+    name: "Growth Water",
+    rarity: RARITY.COMMON,
+    category: "CONSUMABLES",
+    icon: "💧",
+    description: "Special water that reduces plant growth time by 1 hour",
+  },
+  [ITEM_TYPES.FISH_FOOD]: {
+    name: "Fish Food",
+    rarity: RARITY.COMMON,
+    category: "CONSUMABLES",
+    icon: "🐟",
+    description: "Food for aquatic ecosystem",
   },
 };
 

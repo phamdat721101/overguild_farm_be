@@ -52,7 +52,7 @@ export class AuthService {
         xp: 0,
         reputationScore: 0,
         balanceGold: 0,
-        balanceRuby: 0,
+        balanceGem: 0,
         avatar: null,
         // ✅ Create 1 empty land (plot 0) - no plant
         lands: {
@@ -88,7 +88,7 @@ export class AuthService {
         xp: user.xp,
         reputationScore: user.reputationScore,
         gold: user.balanceGold,
-        ruby: user.balanceRuby,
+        gem: user.balanceGem,
         landsCount: user.lands.length, // Will be 1
         plantsCount: user.lands.filter((l) => l.plant !== null).length, // Will be 0
       },
@@ -129,7 +129,7 @@ export class AuthService {
         xp: user.xp,
         reputationScore: user.reputationScore,
         gold: user.balanceGold,
-        ruby: user.balanceRuby,
+        gem: user.balanceGem,
         landsCount: user.lands.length,
         plantsCount: user.lands.filter((l) => l.plant !== null).length,
       },
