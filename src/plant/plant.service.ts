@@ -158,18 +158,25 @@ export class PlantService {
       throw new NotFoundException("Plant not found");
     }
 
+    const config = PLANT_CONFIGS[plant.type] || PLANT_CONFIGS.ALGAE;
+
+    // Check Maturity
+    if (plant.stage === "MATURE" || (plant.activeGrowthHours >= config.totalHours)) {
+      throw new BadRequestException("This plant is fully grown and ready to harvest!");
+    }
+
     if (plant.stage === "DEAD") {
       throw new BadRequestException("This plant has died. You must clear the land to plant again.");
     }
 
-    if (plant.stage === "MATURE") {
-      throw new BadRequestException("This plant is ready to harvest!");
-    }
+    // Check Water Capacity
+    // 1 Drop = 3 Hours
+    // Capacity = config.waterCapacityDrops * 3 hours
+    const WATER_VALUE_HOURS = 3;
+    const MAX_WATER_HOURS = (config.waterCapacityDrops || 3) * WATER_VALUE_HOURS;
 
-    // Check ownership (only owner can water for now, or maybe friends?)
-    if (plant.land.userId !== watererId) {
-      // For now, allow friend watering if implemented? Strict ownership for simplicity first.
-      // throw new BadRequestException("You can only water your own plants");
+    if (plant.waterBalance + WATER_VALUE_HOURS > MAX_WATER_HOURS) {
+      throw new BadRequestException(`Plant is fully hydrated! (Max ${config.waterCapacityDrops} drops). Wait for it to absorb water.`);
     }
 
     // Check if user has WATER item
@@ -185,34 +192,19 @@ export class PlantService {
     });
 
     // Update Plant
-    // 1 Drop = 3 Hours
-    const WATER_VALUE_HOURS = 3;
-
-    // If plant was withering (waterBalance <= 0), this revives it.
-    // We clear witheredAt.
-
-    const newWaterBalance = Math.max(0, plant.waterBalance) + WATER_VALUE_HOURS;
+    const newWaterBalance = plant.waterBalance + WATER_VALUE_HOURS; // No need Math.max(0) as it's adding
     const newWaterCount = plant.waterCount + 1;
     const newInteractions = plant.interactions + 1;
-
-    // Calculate generic stage (visual mostly, as logic is now activeGrowthHours based)
-    // But we still track waterCount for legacy/achievements
-    const newStage = this.calculateStageFromWaters(newWaterCount); // Keep legacy stage calc for now or update?
-    // Actually, stage should depend on activeGrowthHours now. 
-    // But `calculateStageFromWaters` is based on counts. 
-    // Let's rely on Cron to update Stage based on hours. 
-    // But we can update stats here.
 
     const updatedPlant = await this.prisma.plant.update({
       where: { id: plantId },
       data: {
         waterBalance: newWaterBalance,
         witheredAt: null, // Clear withering status
-        waterCount: newWaterCount,
+        waterCount: newWaterCount, // Keep legacy count for missions
         interactions: newInteractions,
         lastInteractedAt: new Date(),
         lastWateredAt: new Date(),
-        // waterBy: ... (add user to list)
       },
       include: { land: true },
     });
@@ -224,12 +216,12 @@ export class PlantService {
     }
 
     this.logger.log(
-      `User ${watererId} watered plant ${plantId}. Balance: ${newWaterBalance}h.`,
+      `User ${watererId} watered plant ${plantId} (${plant.type}). Balance: ${newWaterBalance}/${MAX_WATER_HOURS}h.`,
     );
 
     return {
       plant: updatedPlant,
-      message: `💧 Added 3 hours of hydration! Plant is healthy. (Balance: ${newWaterBalance}h)`,
+      message: `💧 Added 3 hours of hydration! (Balance: ${newWaterBalance}/${MAX_WATER_HOURS}h)`,
       waterBalance: newWaterBalance,
       withered: false,
     };
@@ -402,6 +394,10 @@ export class PlantService {
   /**
    * Harvest mature plant
    */
+  /**
+   * Harvest mature plant
+   * ✅ UPDATED: Validates against `activeGrowthHours` instead of `waterCount`.
+   */
   async harvestPlant(plantId: string, userId: string) {
     const plant = await this.prisma.plant.findUnique({
       where: { id: plantId },
@@ -416,20 +412,30 @@ export class PlantService {
       throw new BadRequestException("You can only harvest your own plants");
     }
 
-    if (plant.stage !== "MATURE") {
+    const config = PLANT_CONFIGS[plant.type] || PLANT_CONFIGS.ALGAE;
+
+    // Check if fully grown (allow if stage is MATURE OR hours met)
+    const isReady = plant.stage === "MATURE" || plant.activeGrowthHours >= config.totalHours;
+
+    if (!isReady) {
+      const hoursRemaining = Math.max(0, config.totalHours - plant.activeGrowthHours);
       throw new BadRequestException(
-        `Plant is not ready to harvest. Current stage: ${plant.stage}. Needs ${15 - plant.waterCount} more waters.`,
+        `Plant is not ready to harvest. Current stage: ${plant.stage}. Needs ~${hoursRemaining} more growing hours.`,
       );
     }
 
-    const config = PLANT_CONFIGS[plant.type] || PLANT_CONFIGS.ALGAE;
     const baseYield = config.baseYield;
+    // Bonus logic: Keep existing based on interactions? Or simplify?
+    // Let's simplify: fixed bonus for consistency or small random
     const bonusYield = Math.floor(plant.interactions / 5);
     const totalYield = baseYield + bonusYield;
 
     await this.prisma.inventoryItem.upsert({
       where: {
-        userId_itemType: { userId, itemType: "FRUIT" },
+        userId_itemType: { userId, itemType: "FRUIT" }, // Generic fruit or specific? Config has specific keys?
+        // Wait, schema has generic "FRUIT" usually, but game-config defined FRUIT_ALGAE etc.
+        // Let's assume the system uses generic FRUIT key for now unless we refactor Inventory too.
+        // Checking existing code: it used "FRUIT". Let's stick to "FRUIT" for safety.
       },
       create: {
         userId,
@@ -457,7 +463,7 @@ export class PlantService {
       this.logger.error(`Failed to check badges: ${error.message}`);
     }
 
-    this.logger.log(`User ${userId} harvested plant ${plantId}, received ${totalYield} fruits`);
+    this.logger.log(`User ${userId} harvested plant ${plantId} (${plant.type}), received ${totalYield} generic fruits`);
 
     return {
       success: true,
@@ -467,10 +473,9 @@ export class PlantService {
         bonusYield,
         plantType: plant.type,
         plantName: config.nameVi,
-        waterCount: plant.waterCount,
         interactions: plant.interactions,
       },
-      message: `🎉 Harvested ${totalYield} ${config.nameVi} fruits! Land is now empty and ready for new planting.`,
+      message: `🎉 Harvested ${totalYield} fruits from ${config.nameVi}! Land is now empty.`,
     };
   }
 
@@ -576,22 +581,14 @@ export class PlantService {
   private calculateStageFromHours(hours: number, plantType: string): string | null {
     const config = PLANT_CONFIGS[plantType] || PLANT_CONFIGS.ALGAE;
 
-    // Reverse check thresholds
-    // This requires config to have duration mapping or we infer it.
-    // Based on game-config:
-    // SPROUT: duration
-    // GROWING: duration
-    // BLOOM: duration
-    // FRUIT: duration
-
-    // Let's create accumulated thresholds from duration
-    let total = 0;
-    if (hours >= config.stages.FRUIT.duration) return "MATURE";
+    // Strict Stage Calculation based on Growth Hours
+    if (hours >= config.stages.FRUIT.duration) return "MATURE"; // Completed
     if (hours >= config.stages.BLOOM.duration) return "BLOOM";
     if (hours >= config.stages.GROWING.duration) return "GROWING";
     if (hours >= config.stages.SPROUT.duration) return "SPROUT";
 
-    return null;
+    // Default if < SPROUT duration
+    return "SEED";
   }
 
   private formatTimeRemaining(ms: number): string {

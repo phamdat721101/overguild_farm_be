@@ -88,14 +88,15 @@ export const PLANT_CONFIGS = {
         source: "Shop/Starter",
         diggingHours: 1,
         growingHours: 12,
-        totalHours: 13,
+        totalHours: 12, // 12h Total
         baseYield: 3,
+        waterCapacityDrops: 3, // 3 drops max
         stages: {
             SEED: { name: "Hạt", nameVi: "Hạt", duration: 0 },
-            SPROUT: { name: "Mầm", nameVi: "Mầm", duration: 3 },
-            GROWING: { name: "Cây", nameVi: "Cây", duration: 8 },
-            BLOOM: { name: "Hoa", nameVi: "Hoa", duration: 12 },
-            FRUIT: { name: "Quả", nameVi: "Quả", duration: 13 },
+            SPROUT: { name: "Mầm", nameVi: "Mầm", duration: 2 },
+            GROWING: { name: "Cây", nameVi: "Cây", duration: 6 },
+            BLOOM: { name: "Hoa", nameVi: "Hoa", duration: 10 },
+            FRUIT: { name: "Quả", nameVi: "Quả", duration: 12 },
         },
     },
     MUSHROOM: {
@@ -104,15 +105,16 @@ export const PLANT_CONFIGS = {
         source: "Craft (5 Tảo)",
         diggingHours: 10,
         growingHours: 72,
-        totalHours: 82,
+        totalHours: 72, // 72h Total
         baseYield: 5,
         craftCost: { ALGAE: 5 },
+        waterCapacityDrops: 5, // 5 drops max
         stages: {
             SEED: { name: "Bào tử", nameVi: "Bào tử", duration: 0 },
-            SPROUT: { name: "Sợi nấm", nameVi: "Sợi nấm", duration: 10 },
-            GROWING: { name: "Thân nấm", nameVi: "Thân nấm", duration: 30 },
+            SPROUT: { name: "Sợi nấm", nameVi: "Sợi nấm", duration: 12 },
+            GROWING: { name: "Thân nấm", nameVi: "Thân nấm", duration: 36 },
             BLOOM: { name: "Nấm trưởng thành", nameVi: "Nấm trưởng thành", duration: 60 },
-            FRUIT: { name: "Nấm thu hoạch", nameVi: "Nấm thu hoạch", duration: 82 },
+            FRUIT: { name: "Nấm thu hoạch", nameVi: "Nấm thu hoạch", duration: 72 },
         },
     },
     TREE: {
@@ -121,14 +123,32 @@ export const PLANT_CONFIGS = {
         source: "NFT Seed",
         diggingHours: 72,
         growingHours: 720,
-        totalHours: 792,
+        totalHours: 720, // 30 Days (30 * 24 = 720h)
         baseYield: 10,
+        waterCapacityDrops: 8, // 8 drops max
         stages: {
             SEED: { name: "Hạt giống", nameVi: "Hạt giống", duration: 0 },
-            SPROUT: { name: "Mầm non", nameVi: "Mầm non", duration: 72 },
-            GROWING: { name: "Cây con", nameVi: "Cây con", duration: 240 },
-            BLOOM: { name: "Cây ra hoa", nameVi: "Cây ra hoa", duration: 480 },
-            FRUIT: { name: "Cây có quả", nameVi: "Cây có quả", duration: 792 },
+            SPROUT: { name: "Mầm (5 ngày)", nameVi: "Mầm", duration: 120 }, // 5 days * 24h = 120h
+            GROWING: { name: "Cây Non (7 ngày)", nameVi: "Cây Non", duration: 288 }, // 120 + 7*24 = 120 + 168 = 288h
+            BLOOM: { name: "Ra Hoa", nameVi: "Ra Hoa", duration: 648 }, // 288 + 15*24 (actually wait, let's map correctly)
+            // User Requirements:
+            // Quy trình Cây (Tree): Mầm (5 ngày) -> Cây Non (7 ngày – Ra Hoa) -> Quả (15 ngày – Chín).
+            // Total = 5 + 7 + 15 = 27 days? Or is it cumulative?
+            // "Mầm (5 ngày)" -> Sprout lasts 5 days.
+            // "Cây Non (7 ngày - Ra Hoa)" -> Sapling lasts 7 days, then Blooms.
+            // "Quả (15 ngày - Chín)" -> Fruits take 15 days to ripen?
+            // Total: 5 + 7 + 15 = 27 Days. But "Tổng Thời Gian Lớn" says "30 Ngày".
+            // Let's assume there's a 3 day gap or digging time included?
+            // The prompt says "Growing Phase" table: Tree = 30 Days.
+            // Let's stick to 30 Days Total = 720h.
+            // Let's map stages proportionally or as close as possible.
+            // Stage 1 (SEED): 0
+            // Stage 2 (SPROUT): 0 -> 5 days (120h)
+            // Stage 3 (GROWING): 5 -> 12 days (288h) [Duration 7 days]
+            // Stage 4 (BLOOM): 12 -> 27 days (648h) [Duration 15 days]
+            // Stage 5 (FRUIT/CHIN): 27 -> 30 days (720h) [Duration 3 days remaining to fully mature?]
+            // Actually, let's set thresholds for *entering* the next stage.
+            FRUIT: { name: "Quả Chín", nameVi: "Quả Chín", duration: 720 },
         },
     },
 };
