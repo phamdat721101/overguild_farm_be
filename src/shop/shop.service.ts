@@ -30,7 +30,7 @@ export class ShopService {
     private readonly prisma: PrismaClient,
     private readonly inventoryService: InventoryService,
     private readonly progressionService: ProgressionService
-  ) { }
+  ) {}
 
   /**
    * Claim free water (The Well) - 12h cooldown
@@ -47,9 +47,14 @@ export class ShopService {
     const now = new Date();
     // Check cooldown
     if (user.lastFreeWaterAt) {
-      const nextClaimTime = new Date(user.lastFreeWaterAt.getTime() + this.WATER_COOLDOWN_HOURS * 60 * 60 * 1000);
+      const nextClaimTime = new Date(
+        user.lastFreeWaterAt.getTime() +
+          this.WATER_COOLDOWN_HOURS * 60 * 60 * 1000
+      );
       if (now < nextClaimTime) {
-        throw new BadRequestException(`The Well is dry. Come back at ${nextClaimTime.toISOString()}`);
+        throw new BadRequestException(
+          `The Well is dry. Come back at ${nextClaimTime.toISOString()}`
+        );
       }
     }
 
@@ -70,7 +75,9 @@ export class ShopService {
       message: "💧 Collected 1 Water Drop from The Well! (+3h Growth Time)",
       item: ITEM_TYPES.WATER,
       amount: 1,
-      nextClaimAt: new Date(now.getTime() + this.WATER_COOLDOWN_HOURS * 60 * 60 * 1000).toISOString(),
+      nextClaimAt: new Date(
+        now.getTime() + this.WATER_COOLDOWN_HOURS * 60 * 60 * 1000
+      ).toISOString(),
     };
   }
 
@@ -89,7 +96,10 @@ export class ShopService {
     let isReady = true;
 
     if (user.lastFreeWaterAt) {
-      nextClaimTime = new Date(user.lastFreeWaterAt.getTime() + this.WATER_COOLDOWN_HOURS * 60 * 60 * 1000);
+      nextClaimTime = new Date(
+        user.lastFreeWaterAt.getTime() +
+          this.WATER_COOLDOWN_HOURS * 60 * 60 * 1000
+      );
       if (now < nextClaimTime) {
         isReady = false;
       } else {
@@ -101,7 +111,9 @@ export class ShopService {
     return {
       isReady,
       nextClaimAt: isReady ? now.toISOString() : nextClaimTime.toISOString(),
-      lastClaimedAt: user.lastFreeWaterAt ? user.lastFreeWaterAt.toISOString() : null,
+      lastClaimedAt: user.lastFreeWaterAt
+        ? user.lastFreeWaterAt.toISOString()
+        : null,
     };
   }
 
@@ -205,7 +217,9 @@ export class ShopService {
       let finalPrice = config.priceGold;
       if (config.key === GoldShopItemKey.GROWTH_WATER) {
         // Requirement: Level 5+
-        const levelConfig = this.progressionService.getCurrentLevelFromXp(user.xp);
+        const levelConfig = this.progressionService.getCurrentLevelFromXp(
+          user.xp
+        );
         if (levelConfig.level < 5) {
           throw new BadRequestException("Wishing Well requires Level 5+");
         }
@@ -291,7 +305,11 @@ export class ShopService {
         },
       });
 
-      return { record, newBalanceGold: user.balanceGold - finalPrice, finalPrice };
+      return {
+        record,
+        newBalanceGold: user.balanceGold - finalPrice,
+        finalPrice,
+      };
     });
 
     return {
@@ -538,16 +556,32 @@ export class ShopService {
         }
 
         if (config.reward.landSlot) {
-          const maxPlotIndex = Math.max(
-            ...user.lands.map((l) => l.plotIndex),
-            -1
-          );
-          const newPlotIndex = config.reward.landSlot - 1; // Convert to 0-based index
+          // Use plotIndex from FE if provided, otherwise calculate from landSlot
+          const newPlotIndex =
+            dto.plotIndex !== undefined
+              ? dto.plotIndex
+              : config.reward.landSlot - 1;
 
-          if (newPlotIndex <= maxPlotIndex) {
-            throw new BadRequestException("Land slot already owned");
+          // Validate plotIndex is not negative
+          if (newPlotIndex < 0) {
+            throw new BadRequestException("Invalid plot index");
           }
 
+          // Check if plot already exists
+          const existingPlot = await tx.land.findFirst({
+            where: {
+              userId,
+              plotIndex: newPlotIndex,
+            },
+          });
+
+          if (existingPlot) {
+            throw new BadRequestException(
+              `Land plot ${newPlotIndex} already owned`
+            );
+          }
+
+          // Create new land with auto-generated UUID
           await tx.land.create({
             data: {
               userId,

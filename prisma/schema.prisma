@@ -116,11 +116,13 @@ model InventoryItem {
   userId    String   @map("user_id")
   itemType  String   @map("item_type")
   amount    Int      @default(0)
+  location  String   @default("STORAGE") @map("location") // STORAGE or BACKPACK
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, itemType])
+  @@unique([userId, itemType, location])
+  @@index([userId, location])
   @@map("inventory_items")
 }
 

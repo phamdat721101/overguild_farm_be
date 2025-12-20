@@ -1,5 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsEnum, IsString, IsOptional } from "class-validator";
+import { IsEnum, IsString, IsOptional, IsInt, Min } from "class-validator";
 import { CashShopItemKey } from "../shop.constants";
 
 export class CashShopPurchaseDto {
@@ -26,4 +26,15 @@ export class CashShopPurchaseDto {
   @IsOptional()
   @IsString()
   paymentProvider?: string = "stripe";
+
+  @ApiProperty({
+    example: 2,
+    description:
+      "Plot index for land slot purchase (0-based, e.g., 0, 1, 2, 3, 4)",
+    required: false,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  plotIndex?: number;
 }

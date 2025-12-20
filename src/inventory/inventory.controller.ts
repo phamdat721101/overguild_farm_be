@@ -20,6 +20,8 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { InventoryService } from "./inventory.service";
 import { QueryInventoryDto, ItemCategory } from "./dto/query-inventory.dto";
 import { AddItemDto, RemoveItemDto, TransferItemDto } from "./dto/add-item.dto";
+import { MoveToBackpackDto } from "./dto/move-to-backpack.dto";
+import { MoveToStorageDto } from "./dto/move-to-storage.dto";
 
 @ApiTags("Inventory")
 @Controller("inventory")
@@ -99,12 +101,12 @@ export class InventoryController {
   })
   async getInventory(
     @CurrentUser("sub") userId: string,
-    @Query() query: QueryInventoryDto,
+    @Query() query: QueryInventoryDto
   ) {
     return this.inventoryService.getInventory(
       userId,
       query.category,
-      query.search,
+      query.search
     );
   }
 
@@ -154,7 +156,7 @@ export class InventoryController {
   @ApiResponse({ status: 400, description: "Not enough items" })
   async removeItem(
     @CurrentUser("sub") userId: string,
-    @Body() dto: RemoveItemDto,
+    @Body() dto: RemoveItemDto
   ) {
     return this.inventoryService.removeItem(userId, dto);
   }
@@ -190,7 +192,7 @@ export class InventoryController {
   @ApiResponse({ status: 404, description: "Recipient not found" })
   async transferItem(
     @CurrentUser("sub") userId: string,
-    @Body() dto: TransferItemDto,
+    @Body() dto: TransferItemDto
   ) {
     return this.inventoryService.transferItem(userId, dto);
   }
@@ -215,17 +217,74 @@ export class InventoryController {
   async checkItem(
     @CurrentUser("sub") userId: string,
     @Param("itemType") itemType: string,
-    @Param("amount") amount: string,
+    @Param("amount") amount: string
   ) {
     const hasEnough = await this.inventoryService.hasItem(
       userId,
       itemType,
-      parseInt(amount),
+      parseInt(amount)
     );
     return {
       itemType,
       amount: parseInt(amount),
       hasEnough,
     };
+  }
+
+  @Get("backpack")
+  @ApiOperation({
+    summary: "🎒 Get backpack items",
+    description: "Get items currently in user's backpack (limited capacity)",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Returns backpack items and capacity info",
+  })
+  async getBackpack(@CurrentUser("sub") userId: string) {
+    return this.inventoryService.getBackpack(userId);
+  }
+
+  @Get("storage")
+  @ApiOperation({
+    summary: "🏪 Get storage items",
+    description: "Get items in main storage (unlimited capacity)",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Returns storage items",
+  })
+  async getStorage(@CurrentUser("sub") userId: string) {
+    return this.inventoryService.getStorage(userId);
+  }
+
+  @Post("move-to-backpack")
+  @ApiOperation({
+    summary: "➡️ Move item from storage to backpack",
+    description: "Transfer items from main storage to backpack for use",
+  })
+  @ApiResponse({ status: 201, description: "Item moved successfully" })
+  @ApiResponse({
+    status: 400,
+    description: "Not enough items or backpack full",
+  })
+  async moveToBackpack(
+    @CurrentUser("sub") userId: string,
+    @Body() dto: MoveToBackpackDto
+  ) {
+    return this.inventoryService.moveToBackpack(userId, dto);
+  }
+
+  @Post("move-to-storage")
+  @ApiOperation({
+    summary: "⬅️ Move item from backpack to storage",
+    description: "Transfer items from backpack back to main storage",
+  })
+  @ApiResponse({ status: 201, description: "Item moved successfully" })
+  @ApiResponse({ status: 400, description: "Not enough items in backpack" })
+  async moveToStorage(
+    @CurrentUser("sub") userId: string,
+    @Body() dto: MoveToStorageDto
+  ) {
+    return this.inventoryService.moveToStorage(userId, dto);
   }
 }

@@ -8,12 +8,18 @@ import { PrismaClient } from "@prisma/client";
 import { ItemCategory } from "./dto/query-inventory.dto";
 import { AddItemDto, RemoveItemDto, TransferItemDto } from "./dto/add-item.dto";
 import { ITEM_METADATA } from "../common/constants/game-config.constant";
+import {
+  InventoryLocation,
+  BACKPACK_CAPACITY,
+} from "./constants/inventory-locations";
+import { MoveToBackpackDto } from "./dto/move-to-backpack.dto";
+import { MoveToStorageDto } from "./dto/move-to-storage.dto";
 
 @Injectable()
 export class InventoryService {
   private readonly logger = new Logger(InventoryService.name);
 
-  constructor(private readonly prisma: PrismaClient) { }
+  constructor(private readonly prisma: PrismaClient) {}
 
   /**
    * Get user's complete inventory with filtering
@@ -30,7 +36,7 @@ export class InventoryService {
       if (search) {
         const searchUpper = search.toUpperCase();
         const filteredTypes = itemTypes.filter((type) =>
-          type.includes(searchUpper),
+          type.includes(searchUpper)
         );
         whereClause.itemType = { in: filteredTypes };
       } else {
@@ -56,8 +62,9 @@ export class InventoryService {
     const totalTypes = items.length;
 
     this.logger.log(
-      `User ${userId} inventory: ${totalTypes} types, ${totalItems} items (category: ${category || "ALL"
-      }, search: "${search || "none"}")`,
+      `User ${userId} inventory: ${totalTypes} types, ${totalItems} items (category: ${
+        category || "ALL"
+      }, search: "${search || "none"}")`
     );
 
     return {
@@ -122,19 +129,28 @@ export class InventoryService {
       );
     }
 
-    const item = await this.prisma.inventoryItem.upsert({
+    // Check if item exists in storage
+    const existingItem = await this.prisma.inventoryItem.findFirst({
       where: {
-        userId_itemType: { userId, itemType: dto.itemType },
-      },
-      create: {
         userId,
         itemType: dto.itemType,
-        amount: dto.amount,
-      },
-      update: {
-        amount: { increment: dto.amount },
+        location: InventoryLocation.STORAGE,
       },
     });
+
+    const item = existingItem
+      ? await this.prisma.inventoryItem.update({
+          where: { id: existingItem.id },
+          data: { amount: { increment: dto.amount } },
+        })
+      : await this.prisma.inventoryItem.create({
+          data: {
+            userId,
+            itemType: dto.itemType,
+            amount: dto.amount,
+            location: InventoryLocation.STORAGE,
+          },
+        });
 
     this.logger.log(`Added ${dto.amount}x ${dto.itemType} to user ${userId}`);
 
@@ -157,7 +173,7 @@ export class InventoryService {
 
     if (!item || item.amount < dto.amount) {
       throw new BadRequestException(
-        `Not enough ${dto.itemType}. You have ${item?.amount || 0}, need ${dto.amount}`,
+        `Not enough ${dto.itemType}. You have ${item?.amount || 0}, need ${dto.amount}`
       );
     }
 
@@ -175,7 +191,7 @@ export class InventoryService {
     }
 
     this.logger.log(
-      `Removed ${dto.amount}x ${dto.itemType} from user ${userId}`,
+      `Removed ${dto.amount}x ${dto.itemType} from user ${userId}`
     );
 
     return {
@@ -216,7 +232,7 @@ export class InventoryService {
 
     if (!senderItem || senderItem.amount < dto.amount) {
       throw new BadRequestException(
-        `Not enough ${dto.itemType}. You have ${senderItem?.amount || 0}, need ${dto.amount}`,
+        `Not enough ${dto.itemType}. You have ${senderItem?.amount || 0}, need ${dto.amount}`
       );
     }
 
@@ -251,7 +267,7 @@ export class InventoryService {
     });
 
     this.logger.log(
-      `User ${senderId} transferred ${dto.amount}x ${dto.itemType} to ${recipient.id} (${recipient.walletAddress})`,
+      `User ${senderId} transferred ${dto.amount}x ${dto.itemType} to ${recipient.id} (${recipient.walletAddress})`
     );
 
     return {
@@ -274,7 +290,7 @@ export class InventoryService {
   async hasItem(
     userId: string,
     itemType: string,
-    amount: number = 1,
+    amount: number = 1
   ): Promise<boolean> {
     const item = await this.prisma.inventoryItem.findUnique({
       where: {
@@ -291,7 +307,7 @@ export class InventoryService {
   async hasItemAmount(
     userId: string,
     itemType: string,
-    amount: number = 1,
+    amount: number = 1
   ): Promise<boolean> {
     return this.hasItem(userId, itemType, amount);
   }
@@ -304,7 +320,7 @@ export class InventoryService {
     // Map old category names to new ones
     const categoryMap: Record<string, string[]> = {
       [ItemCategory.SEEDS]: Object.keys(ITEM_METADATA).filter((k) =>
-        k.startsWith("SEED_"),
+        k.startsWith("SEED_")
       ),
       [ItemCategory.FRUITS]: [
         "FRUIT",
@@ -313,15 +329,15 @@ export class InventoryService {
         "FRUIT_TREE",
       ],
       [ItemCategory.FERTILIZERS]: Object.keys(ITEM_METADATA).filter((k) =>
-        k.startsWith("FERTILIZER_"),
+        k.startsWith("FERTILIZER_")
       ),
       [ItemCategory.EVENT_REWARDS]: Object.keys(ITEM_METADATA).filter(
-        (k) => k.includes("EVENT") || k.includes("CHECKIN"),
+        (k) => k.includes("EVENT") || k.includes("CHECKIN")
       ),
       [ItemCategory.CONSUMABLES]: [
         "WATER",
         ...Object.keys(ITEM_METADATA).filter((k) =>
-          k.startsWith("FERTILIZER_"),
+          k.startsWith("FERTILIZER_")
         ),
       ],
     };
@@ -366,9 +382,213 @@ export class InventoryService {
       id: item.id,
       itemType: item.itemType,
       amount: item.amount,
+      location: item.location || "STORAGE",
       ...metadata,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
+    };
+  }
+
+  /**
+   * Get backpack items (items user is carrying)
+   */
+  async getBackpack(userId: string) {
+    const items = await this.prisma.inventoryItem.findMany({
+      where: {
+        userId,
+        location: InventoryLocation.BACKPACK,
+      },
+      orderBy: { itemType: "asc" },
+    });
+
+    const totalSlots = items.reduce((sum, item) => sum + 1, 0); // Each item type = 1 slot
+    const usedSlots = items.length;
+    const availableSlots = BACKPACK_CAPACITY - usedSlots;
+
+    return {
+      userId,
+      backpack: items.map((item) => this.enrichItemData(item)),
+      capacity: {
+        total: BACKPACK_CAPACITY,
+        used: usedSlots,
+        available: availableSlots,
+      },
+    };
+  }
+
+  /**
+   * Get storage items (main storage)
+   */
+  async getStorage(userId: string) {
+    const items = await this.prisma.inventoryItem.findMany({
+      where: {
+        userId,
+        location: InventoryLocation.STORAGE,
+      },
+      orderBy: { itemType: "asc" },
+    });
+
+    return {
+      userId,
+      storage: items.map((item) => this.enrichItemData(item)),
+      summary: {
+        totalTypes: items.length,
+        totalItems: items.reduce((sum, item) => sum + item.amount, 0),
+      },
+    };
+  }
+
+  /**
+   * Move item from storage to backpack
+   */
+  async moveToBackpack(userId: string, dto: MoveToBackpackDto) {
+    // Check backpack capacity
+    const backpackItems = await this.prisma.inventoryItem.findMany({
+      where: {
+        userId,
+        location: InventoryLocation.BACKPACK,
+      },
+    });
+
+    const existingBackpackItem = backpackItems.find(
+      (item) => item.itemType === dto.itemType
+    );
+
+    if (!existingBackpackItem && backpackItems.length >= BACKPACK_CAPACITY) {
+      throw new BadRequestException(
+        `Backpack is full (${BACKPACK_CAPACITY}/${BACKPACK_CAPACITY} slots)`
+      );
+    }
+
+    // Check storage has enough items
+    const storageItem = await this.prisma.inventoryItem.findFirst({
+      where: {
+        userId,
+        itemType: dto.itemType,
+        location: InventoryLocation.STORAGE,
+      },
+    });
+
+    if (!storageItem || storageItem.amount < dto.amount) {
+      throw new BadRequestException(
+        `Not enough ${dto.itemType} in storage. You have ${storageItem?.amount || 0}, need ${dto.amount}`
+      );
+    }
+
+    // Move items in transaction
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Remove from storage
+      if (storageItem.amount === dto.amount) {
+        await tx.inventoryItem.delete({ where: { id: storageItem.id } });
+      } else {
+        await tx.inventoryItem.update({
+          where: { id: storageItem.id },
+          data: { amount: { decrement: dto.amount } },
+        });
+      }
+
+      // Add to backpack
+      const existingBackpack = await tx.inventoryItem.findFirst({
+        where: {
+          userId,
+          itemType: dto.itemType,
+          location: InventoryLocation.BACKPACK,
+        },
+      });
+
+      const backpackItem = existingBackpack
+        ? await tx.inventoryItem.update({
+            where: { id: existingBackpack.id },
+            data: { amount: { increment: dto.amount } },
+          })
+        : await tx.inventoryItem.create({
+            data: {
+              userId,
+              itemType: dto.itemType,
+              amount: dto.amount,
+              location: InventoryLocation.BACKPACK,
+            },
+          });
+
+      return { backpackItem };
+    });
+
+    this.logger.log(
+      `User ${userId} moved ${dto.amount}x ${dto.itemType} from storage to backpack`
+    );
+
+    return {
+      success: true,
+      item: this.enrichItemData(result.backpackItem),
+      message: `Moved ${dto.amount}x ${dto.itemType} to backpack`,
+    };
+  }
+
+  /**
+   * Move item from backpack to storage
+   */
+  async moveToStorage(userId: string, dto: MoveToStorageDto) {
+    // Check backpack has enough items
+    const backpackItem = await this.prisma.inventoryItem.findFirst({
+      where: {
+        userId,
+        itemType: dto.itemType,
+        location: InventoryLocation.BACKPACK,
+      },
+    });
+
+    if (!backpackItem || backpackItem.amount < dto.amount) {
+      throw new BadRequestException(
+        `Not enough ${dto.itemType} in backpack. You have ${backpackItem?.amount || 0}, need ${dto.amount}`
+      );
+    }
+
+    // Move items in transaction
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Remove from backpack
+      if (backpackItem.amount === dto.amount) {
+        await tx.inventoryItem.delete({ where: { id: backpackItem.id } });
+      } else {
+        await tx.inventoryItem.update({
+          where: { id: backpackItem.id },
+          data: { amount: { decrement: dto.amount } },
+        });
+      }
+
+      // Add to storage
+      const existingStorage = await tx.inventoryItem.findFirst({
+        where: {
+          userId,
+          itemType: dto.itemType,
+          location: InventoryLocation.STORAGE,
+        },
+      });
+
+      const storageItem = existingStorage
+        ? await tx.inventoryItem.update({
+            where: { id: existingStorage.id },
+            data: { amount: { increment: dto.amount } },
+          })
+        : await tx.inventoryItem.create({
+            data: {
+              userId,
+              itemType: dto.itemType,
+              amount: dto.amount,
+              location: InventoryLocation.STORAGE,
+            },
+          });
+
+      return { storageItem };
+    });
+
+    this.logger.log(
+      `User ${userId} moved ${dto.amount}x ${dto.itemType} from backpack to storage`
+    );
+
+    return {
+      success: true,
+      item: this.enrichItemData(result.storageItem),
+      message: `Moved ${dto.amount}x ${dto.itemType} to storage`,
     };
   }
 }
