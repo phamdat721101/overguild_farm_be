@@ -247,7 +247,7 @@ export class MissionService {
       for (const item of config.reward.items) {
         await this.prisma.inventoryItem.upsert({
           where: {
-            userId_itemType: { userId, itemType: item.type },
+            userId_itemType_location: { userId, itemType: item.type, location: "STORAGE" },
           },
           create: {
             userId,

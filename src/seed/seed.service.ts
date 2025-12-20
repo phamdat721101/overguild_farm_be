@@ -7,7 +7,7 @@ import { PrismaClient } from "@prisma/client";
 
 @Injectable()
 export class SeedService {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(private readonly prisma: PrismaClient) { }
 
   /**
    * Get user seeds from inventory_items
@@ -45,7 +45,7 @@ export class SeedService {
 
     return this.prisma.inventoryItem.upsert({
       where: {
-        userId_itemType: { userId, itemType },
+        userId_itemType_location: { userId, itemType, location: "STORAGE" },
       },
       create: {
         userId,
@@ -67,7 +67,7 @@ export class SeedService {
 
     const seedItem = await this.prisma.inventoryItem.findUnique({
       where: {
-        userId_itemType: { userId, itemType },
+        userId_itemType_location: { userId, itemType, location: "STORAGE" },
       },
     });
 
@@ -93,7 +93,7 @@ export class SeedService {
     // Check if user has 5 ALGAE fruits
     const algaeFruit = await this.prisma.inventoryItem.findUnique({
       where: {
-        userId_itemType: { userId, itemType: "FRUIT_ALGAE" },
+        userId_itemType_location: { userId, itemType: "FRUIT_ALGAE", location: "STORAGE" },
       },
     });
 

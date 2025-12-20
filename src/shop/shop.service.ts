@@ -30,7 +30,7 @@ export class ShopService {
     private readonly prisma: PrismaClient,
     private readonly inventoryService: InventoryService,
     private readonly progressionService: ProgressionService
-  ) {}
+  ) { }
 
   /**
    * Claim free water (The Well) - 12h cooldown
@@ -49,7 +49,7 @@ export class ShopService {
     if (user.lastFreeWaterAt) {
       const nextClaimTime = new Date(
         user.lastFreeWaterAt.getTime() +
-          this.WATER_COOLDOWN_HOURS * 60 * 60 * 1000
+        this.WATER_COOLDOWN_HOURS * 60 * 60 * 1000
       );
       if (now < nextClaimTime) {
         throw new BadRequestException(
@@ -98,7 +98,7 @@ export class ShopService {
     if (user.lastFreeWaterAt) {
       nextClaimTime = new Date(
         user.lastFreeWaterAt.getTime() +
-          this.WATER_COOLDOWN_HOURS * 60 * 60 * 1000
+        this.WATER_COOLDOWN_HOURS * 60 * 60 * 1000
       );
       if (now < nextClaimTime) {
         isReady = false;
@@ -251,7 +251,7 @@ export class ShopService {
       if (config.reward?.itemType && config.reward?.amount) {
         await tx.inventoryItem.upsert({
           where: {
-            userId_itemType: { userId, itemType: config.reward.itemType },
+            userId_itemType_location: { userId, itemType: config.reward.itemType, location: "STORAGE" },
           },
           create: {
             userId,

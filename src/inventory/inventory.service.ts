@@ -19,7 +19,7 @@ import { MoveToStorageDto } from "./dto/move-to-storage.dto";
 export class InventoryService {
   private readonly logger = new Logger(InventoryService.name);
 
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(private readonly prisma: PrismaClient) { }
 
   /**
    * Get user's complete inventory with filtering
@@ -62,8 +62,7 @@ export class InventoryService {
     const totalTypes = items.length;
 
     this.logger.log(
-      `User ${userId} inventory: ${totalTypes} types, ${totalItems} items (category: ${
-        category || "ALL"
+      `User ${userId} inventory: ${totalTypes} types, ${totalItems} items (category: ${category || "ALL"
       }, search: "${search || "none"}")`
     );
 
@@ -140,17 +139,17 @@ export class InventoryService {
 
     const item = existingItem
       ? await this.prisma.inventoryItem.update({
-          where: { id: existingItem.id },
-          data: { amount: { increment: dto.amount } },
-        })
+        where: { id: existingItem.id },
+        data: { amount: { increment: dto.amount } },
+      })
       : await this.prisma.inventoryItem.create({
-          data: {
-            userId,
-            itemType: dto.itemType,
-            amount: dto.amount,
-            location: InventoryLocation.STORAGE,
-          },
-        });
+        data: {
+          userId,
+          itemType: dto.itemType,
+          amount: dto.amount,
+          location: InventoryLocation.STORAGE,
+        },
+      });
 
     this.logger.log(`Added ${dto.amount}x ${dto.itemType} to user ${userId}`);
 
@@ -167,7 +166,7 @@ export class InventoryService {
   async removeItem(userId: string, dto: RemoveItemDto) {
     const item = await this.prisma.inventoryItem.findUnique({
       where: {
-        userId_itemType: { userId, itemType: dto.itemType },
+        userId_itemType_location: { userId, itemType: dto.itemType, location: InventoryLocation.STORAGE },
       },
     });
 
@@ -226,7 +225,7 @@ export class InventoryService {
     // Check sender has enough items
     const senderItem = await this.prisma.inventoryItem.findUnique({
       where: {
-        userId_itemType: { userId: senderId, itemType: dto.itemType },
+        userId_itemType_location: { userId: senderId, itemType: dto.itemType, location: InventoryLocation.STORAGE },
       },
     });
 
@@ -251,7 +250,7 @@ export class InventoryService {
       // Add to recipient
       const recipientItem = await tx.inventoryItem.upsert({
         where: {
-          userId_itemType: { userId: recipient.id, itemType: dto.itemType },
+          userId_itemType_location: { userId: recipient.id, itemType: dto.itemType, location: InventoryLocation.STORAGE },
         },
         create: {
           userId: recipient.id,
@@ -294,7 +293,7 @@ export class InventoryService {
   ): Promise<boolean> {
     const item = await this.prisma.inventoryItem.findUnique({
       where: {
-        userId_itemType: { userId, itemType },
+        userId_itemType_location: { userId, itemType, location: InventoryLocation.STORAGE },
       },
     });
 
@@ -498,17 +497,17 @@ export class InventoryService {
 
       const backpackItem = existingBackpack
         ? await tx.inventoryItem.update({
-            where: { id: existingBackpack.id },
-            data: { amount: { increment: dto.amount } },
-          })
+          where: { id: existingBackpack.id },
+          data: { amount: { increment: dto.amount } },
+        })
         : await tx.inventoryItem.create({
-            data: {
-              userId,
-              itemType: dto.itemType,
-              amount: dto.amount,
-              location: InventoryLocation.BACKPACK,
-            },
-          });
+          data: {
+            userId,
+            itemType: dto.itemType,
+            amount: dto.amount,
+            location: InventoryLocation.BACKPACK,
+          },
+        });
 
       return { backpackItem };
     });
@@ -566,17 +565,17 @@ export class InventoryService {
 
       const storageItem = existingStorage
         ? await tx.inventoryItem.update({
-            where: { id: existingStorage.id },
-            data: { amount: { increment: dto.amount } },
-          })
+          where: { id: existingStorage.id },
+          data: { amount: { increment: dto.amount } },
+        })
         : await tx.inventoryItem.create({
-            data: {
-              userId,
-              itemType: dto.itemType,
-              amount: dto.amount,
-              location: InventoryLocation.STORAGE,
-            },
-          });
+          data: {
+            userId,
+            itemType: dto.itemType,
+            amount: dto.amount,
+            location: InventoryLocation.STORAGE,
+          },
+        });
 
       return { storageItem };
     });

@@ -432,7 +432,11 @@ export class PlantService {
 
     await this.prisma.inventoryItem.upsert({
       where: {
-        userId_itemType: { userId, itemType: "FRUIT" }, // Generic fruit or specific? Config has specific keys?
+        userId_itemType_location: {
+          userId,
+          itemType: "FRUIT",
+          location: "STORAGE",
+        }, // Generic fruit or specific? Config has specific keys?
         // Wait, schema has generic "FRUIT" usually, but game-config defined FRUIT_ALGAE etc.
         // Let's assume the system uses generic FRUIT key for now unless we refactor Inventory too.
         // Checking existing code: it used "FRUIT". Let's stick to "FRUIT" for safety.

@@ -42,7 +42,7 @@ export class FertilizerService {
     FERTILIZER_LEGENDARY: 100, // 100 fruits = 1 legendary fertilizer
   };
 
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(private readonly prisma: PrismaClient) { }
 
   /**
    * Get user's fertilizer inventory
@@ -115,7 +115,7 @@ export class FertilizerService {
     // Check fertilizer inventory
     const fertilizer = await this.prisma.inventoryItem.findUnique({
       where: {
-        userId_itemType: { userId, itemType: fertilizerType },
+        userId_itemType_location: { userId, itemType: fertilizerType, location: "STORAGE" },
       },
     });
 
@@ -171,7 +171,7 @@ export class FertilizerService {
 
     this.logger.log(
       `User ${userId} applied ${fertilizerType} to plant ${land.plant.id}. ` +
-        `Stage: ${land.plant.stage} → ${newStage}, Interactions: ${land.plant.interactions} → ${newInteractions}`,
+      `Stage: ${land.plant.stage} → ${newStage}, Interactions: ${land.plant.interactions} → ${newInteractions}`,
     );
 
     return {
@@ -202,7 +202,7 @@ export class FertilizerService {
     // Check fruit inventory
     const fruits = await this.prisma.inventoryItem.findUnique({
       where: {
-        userId_itemType: { userId, itemType: "FRUIT" },
+        userId_itemType_location: { userId, itemType: "FRUIT", location: "STORAGE" },
       },
     });
 
@@ -245,7 +245,7 @@ export class FertilizerService {
     for (const reward of rewards) {
       await this.prisma.inventoryItem.upsert({
         where: {
-          userId_itemType: { userId, itemType: reward.type },
+          userId_itemType_location: { userId, itemType: reward.type, location: "STORAGE" },
         },
         create: {
           userId,

@@ -20,7 +20,7 @@ export class PhygitalService {
     PHYGITAL_REWARD_CATALOG.map((reward) => [reward.key, reward]),
   );
 
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(private readonly prisma: PrismaClient) { }
 
   async getRewardCatalog(userId: string) {
     const balances = await this.getResourceBalances(userId);
@@ -69,7 +69,7 @@ export class PhygitalService {
     const { redemption } = await this.prisma.$transaction(async (tx) => {
       const inventoryItem = await tx.inventoryItem.findUnique({
         where: {
-          userId_itemType: { userId, itemType: resourceMeta.itemType },
+          userId_itemType_location: { userId, itemType: resourceMeta.itemType, location: "STORAGE" },
         },
       });
 

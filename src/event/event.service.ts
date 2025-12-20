@@ -40,7 +40,7 @@ export class EventService {
     private readonly prisma: PrismaClient,
     @Inject(forwardRef(() => MissionService))
     private readonly missionService: MissionService
-  ) {}
+  ) { }
 
   /**
    * Check if external FundX event is currently active (legacy helper)
@@ -123,9 +123,10 @@ export class EventService {
     // Reward: Add 3 SEED_COMMON to inventory
     const seedReward = await this.prisma.inventoryItem.upsert({
       where: {
-        userId_itemType: {
+        userId_itemType_location: {
           userId,
           itemType: "SEED_COMMON",
+          location: "STORAGE",
         },
       },
       create: {
@@ -221,9 +222,10 @@ export class EventService {
     // Give reward to user
     await this.prisma.inventoryItem.upsert({
       where: {
-        userId_itemType: {
+        userId_itemType_location: {
           userId,
           itemType: reward.itemType,
+          location: "STORAGE",
         },
       },
       create: {

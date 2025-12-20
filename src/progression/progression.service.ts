@@ -142,7 +142,11 @@ export class ProgressionService {
       for (const item of levelConfig.rewards.items) {
         await this.prisma.inventoryItem.upsert({
           where: {
-            userId_itemType: { userId, itemType: item.type },
+            userId_itemType_location: {
+              userId,
+              itemType: item.type,
+              location: "STORAGE",
+            },
           },
           create: {
             userId,
