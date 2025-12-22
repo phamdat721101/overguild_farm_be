@@ -430,25 +430,27 @@ export class PlantService {
     const bonusYield = Math.floor(plant.interactions / 5);
     const totalYield = baseYield + bonusYield;
 
-    await this.prisma.inventoryItem.upsert({
-      where: {
-        userId_itemType_location: {
-          userId,
-          itemType: "FRUIT",
-          location: "STORAGE",
-        }, // Generic fruit or specific? Config has specific keys?
-        // Wait, schema has generic "FRUIT" usually, but game-config defined FRUIT_ALGAE etc.
-        // Let's assume the system uses generic FRUIT key for now unless we refactor Inventory too.
-        // Checking existing code: it used "FRUIT". Let's stick to "FRUIT" for safety.
-      },
-      create: {
-        userId,
-        itemType: "FRUIT",
-        amount: totalYield,
-      },
-      update: {
-        amount: { increment: totalYield },
-      },
+
+    // Determine specific fruit item type based on plant type
+    let fruitItemType: string = ITEM_TYPES.FRUIT; // Fallback
+    switch (plant.type) {
+      case "ALGAE":
+        fruitItemType = ITEM_TYPES.FRUIT_ALGAE;
+        break;
+      case "MUSHROOM":
+        fruitItemType = ITEM_TYPES.FRUIT_MUSHROOM;
+        break;
+      case "TREE":
+        fruitItemType = ITEM_TYPES.FRUIT_TREE;
+        break;
+      default:
+        this.logger.warn(`Unknown plant type ${plant.type}, using generic FRUIT`);
+    }
+
+    // Use InventoryService to add item (Clean & Consistent)
+    await this.inventoryService.addItem(userId, {
+      itemType: fruitItemType,
+      amount: totalYield,
     });
 
     await this.prisma.plant.delete({
