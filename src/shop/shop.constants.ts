@@ -21,6 +21,10 @@ export enum GemShopItemKey {
   GROWTH_POTION_MID = "GROWTH_POTION_MID",
   GROWTH_POTION_HIGH = "GROWTH_POTION_HIGH",
   EXCHANGE_GOLD = "EXCHANGE_GOLD",
+  LAND_SLOT_2 = "LAND_SLOT_2",
+  LAND_SLOT_3 = "LAND_SLOT_3",
+  LAND_SLOT_4 = "LAND_SLOT_4",
+  LAND_SLOT_5 = "LAND_SLOT_5",
 }
 
 // Cash Shop Items
@@ -29,10 +33,6 @@ export enum CashShopItemKey {
   GEM_PACK_MEDIUM = "GEM_PACK_MEDIUM",
   GEM_PACK_LARGE = "GEM_PACK_LARGE",
   GEM_PACK_MEGA = "GEM_PACK_MEGA",
-  LAND_SLOT_2 = "LAND_SLOT_2",
-  LAND_SLOT_3 = "LAND_SLOT_3",
-  LAND_SLOT_4 = "LAND_SLOT_4",
-  LAND_SLOT_5 = "LAND_SLOT_5",
 }
 
 // Base Shop Item Config
@@ -72,6 +72,7 @@ export type GemShopItemConfig = BaseShopItemConfig & {
     amount?: number;
     gold?: number;
     effect?: string; // For potions
+    landSlot?: number;
   };
 };
 
@@ -81,7 +82,6 @@ export type CashShopItemConfig = BaseShopItemConfig & {
   priceUSD: number;
   reward?: {
     gems?: number;
-    landSlot?: number;
   };
 };
 
@@ -208,6 +208,46 @@ export const GEM_SHOP_ITEMS: GemShopItemConfig[] = [
       gold: 1000,
     },
   },
+  {
+    key: GemShopItemKey.LAND_SLOT_2,
+    name: "Land Slot 2",
+    description: "Unlock the 2nd land plot",
+    priceGem: 300,
+    icon: "🏞️",
+    reward: {
+      landSlot: 2,
+    },
+  },
+  {
+    key: GemShopItemKey.LAND_SLOT_3,
+    name: "Land Slot 3",
+    description: "Unlock the 3rd land plot",
+    priceGem: 1200,
+    icon: "🏞️",
+    reward: {
+      landSlot: 3,
+    },
+  },
+  {
+    key: GemShopItemKey.LAND_SLOT_4,
+    name: "Land Slot 4",
+    description: "Unlock the 4th land plot",
+    priceGem: 3500,
+    icon: "🏞️",
+    reward: {
+      landSlot: 4,
+    },
+  },
+  {
+    key: GemShopItemKey.LAND_SLOT_5,
+    name: "Land Slot 5",
+    description: "Unlock the 5th land plot",
+    priceGem: 7000,
+    icon: "🏞️",
+    reward: {
+      landSlot: 5,
+    },
+  },
 ];
 
 // Cash Shop Items
@@ -250,46 +290,6 @@ export const CASH_SHOP_ITEMS: CashShopItemConfig[] = [
     icon: "💎",
     reward: {
       gems: 3000,
-    },
-  },
-  {
-    key: CashShopItemKey.LAND_SLOT_2,
-    name: "Land Slot 2",
-    description: "Unlock the 2nd land plot",
-    priceUSD: 15,
-    icon: "🏞️",
-    reward: {
-      landSlot: 2,
-    },
-  },
-  {
-    key: CashShopItemKey.LAND_SLOT_3,
-    name: "Land Slot 3",
-    description: "Unlock the 3rd land plot",
-    priceUSD: 50,
-    icon: "🏞️",
-    reward: {
-      landSlot: 3,
-    },
-  },
-  {
-    key: CashShopItemKey.LAND_SLOT_4,
-    name: "Land Slot 4",
-    description: "Unlock the 4th land plot",
-    priceUSD: 150,
-    icon: "🏞️",
-    reward: {
-      landSlot: 4,
-    },
-  },
-  {
-    key: CashShopItemKey.LAND_SLOT_5,
-    name: "Land Slot 5",
-    description: "Unlock the 5th land plot",
-    priceUSD: 300,
-    icon: "🏞️",
-    reward: {
-      landSlot: 5,
     },
   },
 ];

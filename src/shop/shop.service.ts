@@ -376,6 +376,10 @@ export class ShopService {
       select: {
         id: true,
         balanceGem: true,
+        lands: {
+          select: { plotIndex: true },
+          orderBy: { plotIndex: "asc" },
+        },
       },
     });
 
@@ -383,11 +387,38 @@ export class ShopService {
       throw new NotFoundException("User not found");
     }
 
+    const currentLandSlots = user.lands.length;
+    const maxLandSlot = Math.max(...user.lands.map((l) => l.plotIndex), 0) + 1;
+
     const catalog = this.gemItems.map((item) => {
-      const affordable = user.balanceGem >= item.priceGem;
+      let affordable = user.balanceGem >= item.priceGem;
+      let available = true;
+
+      // Check if land slot is already owned
+      if (item.reward?.landSlot) {
+        available = item.reward.landSlot > maxLandSlot;
+        // Also check if they have the previous slot (optional requirement, but good for progression)
+        // For now, simple check: can only buy the next immediate slot
+        // actually, let's just check if they ALREADY have it.
+        // If they have slot 3, they shouldn't be able to buy slot 2 or 3 again.
+        // If they have slot 2, they can buy slot 3.
+        // If they have slot 2, they cannot buy slot 4 yet? Usually games enforce order.
+        // Let's enforce order: available if item.reward.landSlot === maxLandSlot + 1
+        // Wait, maxLandSlot is based on plotIndex.
+        // Plot indices are 0-based.
+        // Initial user has plot 0. maxLandSlot = 1 (count). Next index is 1 (2nd slot).
+        // item.reward.landSlot is 2 (2nd slot).
+        // So if user has 1 slot (index 0), maxLandSlot (count) is 1. Next is 2.
+        // Available if item.reward.landSlot === currentLandSlots + 1?
+        // Let's stick to simple "not owned" check for now, or the strict sequential check.
+        // Strict sequential:
+        available = item.reward.landSlot === (currentLandSlots + 1);
+      }
+
       return {
         ...item,
         affordable,
+        available,
       };
     });
 
@@ -395,6 +426,8 @@ export class ShopService {
       user: {
         id: user.id,
         balanceGem: user.balanceGem,
+        currentLandSlots,
+        maxLandSlot,
       },
       items: catalog,
     };
@@ -444,6 +477,52 @@ export class ShopService {
             data: { balanceGold: { increment: config.reward.gold } },
           });
         }
+
+        if (config.reward.landSlot) {
+          // Use plotIndex from FE if provided (rarely used for fixed slots), 
+          // otherwise calculate from landSlot
+          // Formula: landSlot 2 -> plotIndex 1
+          const newPlotIndex = config.reward.landSlot - 1;
+
+          // Validate plotIndex is not negative
+          if (newPlotIndex < 0) {
+            throw new BadRequestException("Invalid plot index");
+          }
+
+          // Check if plot already exists
+          const existingPlot = await tx.land.findFirst({
+            where: {
+              userId,
+              plotIndex: newPlotIndex,
+            },
+          });
+
+          if (existingPlot) {
+            throw new BadRequestException(
+              `Land plot ${newPlotIndex} already owned`
+            );
+          }
+
+          // Verify sequential purchase (optional but recommended)
+          // Ensure user has the previous plot (newPlotIndex - 1)
+          if (newPlotIndex > 0) {
+            const prevPlot = await tx.land.findFirst({
+              where: { userId, plotIndex: newPlotIndex - 1 }
+            });
+            if (!prevPlot) {
+              throw new BadRequestException(`You must unlock the previous land slot first.`);
+            }
+          }
+
+          // Create new land with auto-generated UUID
+          await tx.land.create({
+            data: {
+              userId,
+              plotIndex: newPlotIndex,
+              soilQuality: { fertility: 50, hydration: 50 },
+            },
+          });
+        }
       }
 
       // Record purchase
@@ -491,30 +570,18 @@ export class ShopService {
       throw new NotFoundException("User not found");
     }
 
-    const currentLandSlots = user.lands.length;
-    const maxLandSlot = Math.max(...user.lands.map((l) => l.plotIndex), 0) + 1;
-
     const catalog = this.cashItems.map((item) => {
-      let available = true;
-
-      // Check if land slot is already owned
-      if (item.reward?.landSlot) {
-        available = item.reward.landSlot > maxLandSlot;
-      }
-
+      // Cash items are generally always available unless one-time
+      // But now land slots are gone, so just gems.
       return {
         ...item,
-        available,
-        currentLandSlots,
-        maxLandSlot,
+        available: true,
       };
     });
 
     return {
       user: {
         id: user.id,
-        currentLandSlots,
-        maxLandSlot,
       },
       items: catalog,
     };
@@ -552,42 +619,6 @@ export class ShopService {
           await tx.user.update({
             where: { id: userId },
             data: { balanceGem: { increment: config.reward.gems } },
-          });
-        }
-
-        if (config.reward.landSlot) {
-          // Use plotIndex from FE if provided, otherwise calculate from landSlot
-          const newPlotIndex =
-            dto.plotIndex !== undefined
-              ? dto.plotIndex
-              : config.reward.landSlot - 1;
-
-          // Validate plotIndex is not negative
-          if (newPlotIndex < 0) {
-            throw new BadRequestException("Invalid plot index");
-          }
-
-          // Check if plot already exists
-          const existingPlot = await tx.land.findFirst({
-            where: {
-              userId,
-              plotIndex: newPlotIndex,
-            },
-          });
-
-          if (existingPlot) {
-            throw new BadRequestException(
-              `Land plot ${newPlotIndex} already owned`
-            );
-          }
-
-          // Create new land with auto-generated UUID
-          await tx.land.create({
-            data: {
-              userId,
-              plotIndex: newPlotIndex,
-              soilQuality: { fertility: 50, hydration: 50 },
-            },
           });
         }
       }
