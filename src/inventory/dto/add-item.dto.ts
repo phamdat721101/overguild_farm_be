@@ -17,6 +17,16 @@ export class AddItemDto {
   @IsInt()
   @Min(1)
   amount: number;
+
+  @ApiProperty({
+    description: "Location to add item to (STORAGE or BACKPACK)",
+    example: "STORAGE",
+    required: false,
+    enum: ["STORAGE", "BACKPACK"],
+  })
+  @IsOptional()
+  @IsString()
+  location?: "STORAGE" | "BACKPACK";
 }
 
 export class RemoveItemDto {

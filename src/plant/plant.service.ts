@@ -18,6 +18,7 @@ import {
   STAGE_THRESHOLDS,
 } from "../common/constants/game-config.constant";
 import { ITEM_TYPES } from "../inventory/constants/item-types";
+import { InventoryLocation } from "../inventory/constants/inventory-locations";
 
 @Injectable()
 export class PlantService {
@@ -451,6 +452,7 @@ export class PlantService {
     await this.inventoryService.addItem(userId, {
       itemType: fruitItemType,
       amount: totalYield,
+      location: InventoryLocation.BACKPACK,
     });
 
     await this.prisma.plant.delete({

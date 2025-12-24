@@ -128,12 +128,14 @@ export class InventoryService {
       );
     }
 
-    // Check if item exists in storage
+    // Check if item exists in storage or specified location
+    const targetLocation = dto.location || InventoryLocation.STORAGE;
+
     const existingItem = await this.prisma.inventoryItem.findFirst({
       where: {
         userId,
         itemType: dto.itemType,
-        location: InventoryLocation.STORAGE,
+        location: targetLocation,
       },
     });
 
@@ -147,16 +149,16 @@ export class InventoryService {
           userId,
           itemType: dto.itemType,
           amount: dto.amount,
-          location: InventoryLocation.STORAGE,
+          location: targetLocation,
         },
       });
 
-    this.logger.log(`Added ${dto.amount}x ${dto.itemType} to user ${userId}`);
+    this.logger.log(`Added ${dto.amount}x ${dto.itemType} to user ${userId} at ${targetLocation}`);
 
     return {
       success: true,
       item: this.enrichItemData(item),
-      message: `Added ${dto.amount}x ${dto.itemType} to inventory`,
+      message: `Added ${dto.amount}x ${dto.itemType} to ${targetLocation.toLowerCase()}`,
     };
   }
 
