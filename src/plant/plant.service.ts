@@ -19,6 +19,7 @@ import {
 } from "../common/constants/game-config.constant";
 import { ITEM_TYPES } from "../inventory/constants/item-types";
 import { InventoryLocation } from "../inventory/constants/inventory-locations";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 
 @Injectable()
 export class PlantService {
@@ -33,6 +34,7 @@ export class PlantService {
     private readonly soulboundTokenService: SoulboundTokenService,
     @Inject(forwardRef(() => InventoryService))
     private readonly inventoryService: InventoryService,
+    private readonly eventEmitter: EventEmitter2
   ) { }
 
   /**
@@ -43,7 +45,7 @@ export class PlantService {
     const config = PLANT_CONFIGS[seedType];
     if (!config) {
       throw new BadRequestException(
-        `Invalid seed type. Must be one of: ALGAE, MUSHROOM, TREE`,
+        `Invalid seed type. Must be one of: ALGAE, MUSHROOM, TREE`
       );
     }
 
@@ -58,7 +60,7 @@ export class PlantService {
 
     if (land.plant) {
       throw new BadRequestException(
-        "This land already has a plant. Harvest it first!",
+        "This land already has a plant. Harvest it first!"
       );
     }
 
@@ -68,7 +70,7 @@ export class PlantService {
 
     // ✅ KEY CHANGE: Set lastInteractedAt to (now - cooldown) to bypass first water cooldown
     const initialLastInteracted = new Date(
-      now.getTime() - (PLANT_CONSTANTS.WATER_COOLDOWN_HOURS * 60 * 60 * 1000)
+      now.getTime() - PLANT_CONSTANTS.WATER_COOLDOWN_HOURS * 60 * 60 * 1000
     );
 
     const plant = await this.prisma.plant.create({
@@ -89,7 +91,7 @@ export class PlantService {
     });
 
     this.logger.log(
-      `User ${userId} planted ${seedType} on land ${landId}. First water available immediately.`,
+      `User ${userId} planted ${seedType} on land ${landId}. First water available immediately.`
     );
 
     try {
@@ -113,16 +115,27 @@ export class PlantService {
             // Give 5 Water to Referrer
             await this.inventoryService.addItem(user.referrerId, {
               itemType: ITEM_TYPES.WATER,
-              amount: 5
+              amount: 5,
             });
-            this.logger.log(`Referral Bonus: User ${userId} planted Algae. Sent 5 Water to referrer ${user.referrerId}`);
+            this.logger.log(
+              `Referral Bonus: User ${userId} planted Algae. Sent 5 Water to referrer ${user.referrerId}`
+            );
           }
         }
       }
-
     } catch (error) {
-      this.logger.error(`Failed to process side effects (badges/referrals): ${error.message}`);
+      this.logger.error(
+        `Failed to process side effects (badges/referrals): ${error.message}`
+      );
     }
+
+    this.eventEmitter.emit("land.updated", {
+      userId,
+      land: {
+        ...land,
+        plant: plant,
+      }
+    });
 
     return {
       plant: {
@@ -180,10 +193,26 @@ export class PlantService {
       throw new BadRequestException(`Plant is fully hydrated! (Max ${config.waterCapacityDrops} drops). Wait for it to absorb water.`);
     }
 
+    if (plant.stage === "MATURE") {
+      throw new BadRequestException("This plant is ready to harvest!");
+    }
+
+    // Check ownership (only owner can water for now, or maybe friends?)
+    if (plant.land.userId !== watererId) {
+      // For now, allow friend watering if implemented? Strict ownership for simplicity first.
+      // throw new BadRequestException("You can only water your own plants");
+    }
+
     // Check if user has WATER item
-    const hasWater = await this.inventoryService.hasItemAmount(watererId, ITEM_TYPES.WATER, 1);
+    const hasWater = await this.inventoryService.hasItemAmount(
+      watererId,
+      ITEM_TYPES.WATER,
+      1
+    );
     if (!hasWater) {
-      throw new BadRequestException("You don't have any Water Drops! Get more from The Well.");
+      throw new BadRequestException(
+        "You don't have any Water Drops! Get more from The Well."
+      );
     }
 
     // Consume WATER item
@@ -196,6 +225,14 @@ export class PlantService {
     const newWaterBalance = plant.waterBalance + WATER_VALUE_HOURS; // No need Math.max(0) as it's adding
     const newWaterCount = plant.waterCount + 1;
     const newInteractions = plant.interactions + 1;
+
+    // Calculate generic stage (visual mostly, as logic is now activeGrowthHours based)
+    // But we still track waterCount for legacy/achievements
+    const newStage = this.calculateStageFromWaters(newWaterCount); // Keep legacy stage calc for now or update?
+    // Actually, stage should depend on activeGrowthHours now.
+    // But `calculateStageFromWaters` is based on counts.
+    // Let's rely on Cron to update Stage based on hours.
+    // But we can update stats here.
 
     const updatedPlant = await this.prisma.plant.update({
       where: { id: plantId },
@@ -219,6 +256,11 @@ export class PlantService {
     this.logger.log(
       `User ${watererId} watered plant ${plantId} (${plant.type}). Balance: ${newWaterBalance}/${MAX_WATER_HOURS}h.`,
     );
+
+    this.eventEmitter.emit("plant.updated", {
+      userId: watererId,
+      plant: updatedPlant,
+    });
 
     return {
       plant: updatedPlant,
@@ -289,7 +331,10 @@ export class PlantService {
 
       const activeGrowthHours = plant.activeGrowthHours;
       const totalHoursNeeded = config.totalHours;
-      const progress = Math.min(100, Math.floor((activeGrowthHours / totalHoursNeeded) * 100));
+      const progress = Math.min(
+        100,
+        Math.floor((activeGrowthHours / totalHoursNeeded) * 100)
+      );
 
       // Calculate anticipated harvest time if maintained healthy
       const hoursRemaining = Math.max(0, totalHoursNeeded - activeGrowthHours);
@@ -307,7 +352,9 @@ export class PlantService {
           stage: plant.stage,
           stageName: currentStageInfo.nameVi,
           plantedAt: plant.plantedAt.toISOString(),
-          lastWateredAt: plant.lastWateredAt ? plant.lastWateredAt.toISOString() : null,
+          lastWateredAt: plant.lastWateredAt
+            ? plant.lastWateredAt.toISOString()
+            : null,
           waterBalance: plant.waterBalance,
         },
         hydration: {
@@ -329,7 +376,12 @@ export class PlantService {
           hoursRemaining: hoursRemaining,
           currentStage: plant.stage,
         },
-        status: plant.stage === "MATURE" ? "READY_TO_HARVEST" : isDead ? "DEAD" : "GROWING",
+        status:
+          plant.stage === "MATURE"
+            ? "READY_TO_HARVEST"
+            : isDead
+              ? "DEAD"
+              : "GROWING",
       };
     });
   }
@@ -349,7 +401,11 @@ export class PlantService {
   /**
    * Get next stage info with Vietnamese names
    */
-  private getNextStageInfo(currentStage: string, waterCount: number, plantType: string) {
+  private getNextStageInfo(
+    currentStage: string,
+    waterCount: number,
+    plantType: string
+  ) {
     const config = PLANT_CONFIGS[plantType] || PLANT_CONFIGS.ALGAE;
     const stages = ["SEED", "SPROUT", "GROWING", "BLOOM", "MATURE"];
     const stageNamesVi = ["Hạt", "Mầm", "Cây", "Hoa", "Quả"];
@@ -358,7 +414,7 @@ export class PlantService {
       STAGE_THRESHOLDS.SPROUT,
       STAGE_THRESHOLDS.GROWING,
       STAGE_THRESHOLDS.BLOOM,
-      STAGE_THRESHOLDS.FRUIT
+      STAGE_THRESHOLDS.FRUIT,
     ];
 
     const currentIndex = stages.indexOf(currentStage);
@@ -379,7 +435,10 @@ export class PlantService {
     const nextStage = stages[nextIndex];
     const waterTarget = waterTargets[nextIndex];
     const watersNeeded = Math.max(0, waterTarget - waterCount);
-    const progress = Math.min(100, Math.floor((waterCount / waterTarget) * 100));
+    const progress = Math.min(
+      100,
+      Math.floor((waterCount / waterTarget) * 100)
+    );
 
     return {
       currentStage,
@@ -473,6 +532,14 @@ export class PlantService {
 
     this.logger.log(`User ${userId} harvested plant ${plantId} (${plant.type}), received ${totalYield} generic fruits`);
 
+    this.eventEmitter.emit("land.updated", {
+      userId,
+      land: {
+        ...plant.land,
+        plant: null,
+      }
+    });
+
     return {
       success: true,
       harvest: {
@@ -520,6 +587,7 @@ export class PlantService {
       where: {
         stage: { notIn: ["DEAD", "MATURE"] },
       },
+      include: { land: true },
     });
 
     const now = new Date();
@@ -545,14 +613,16 @@ export class PlantService {
         }
 
         // Check Growth/Stage Logic
-        const newStage = this.calculateStageFromHours(activeGrowthHours, plant.type);
+        const newStage = this.calculateStageFromHours(
+          activeGrowthHours,
+          plant.type
+        );
         if (newStage && newStage !== stage) {
           updates.stage = newStage;
           if (newStage === "MATURE") {
             updates.isHarvestable = true;
           }
         }
-
       } else {
         // Plant is drying/withered
         if (!witheredAt) {
@@ -561,7 +631,9 @@ export class PlantService {
           stateChanged = true;
         } else {
           // Check Death
-          const deathTime = new Date(witheredAt.getTime() + 72 * 60 * 60 * 1000);
+          const deathTime = new Date(
+            witheredAt.getTime() + 72 * 60 * 60 * 1000
+          );
           if (now > deathTime) {
             updates.stage = "DEAD";
             updates.fruitYield = 0; // Burn potential yield
@@ -576,7 +648,14 @@ export class PlantService {
           where: { id: plant.id },
           data: updates,
         });
+
         updatedCount++;
+
+        // Emit plant update
+        this.eventEmitter.emit("plant.updated", {
+          userId: plant.land.userId,
+          plant: { ...plant, ...updates }
+        });
       }
     }
 
@@ -586,7 +665,10 @@ export class PlantService {
   /**
    * Calculate stage based on accumulated active growth hours
    */
-  private calculateStageFromHours(hours: number, plantType: string): string | null {
+  private calculateStageFromHours(
+    hours: number,
+    plantType: string
+  ): string | null {
     const config = PLANT_CONFIGS[plantType] || PLANT_CONFIGS.ALGAE;
 
     // Strict Stage Calculation based on Growth Hours
@@ -620,22 +702,27 @@ export class PlantService {
       throw new NotFoundException("Land not found or does not belong to you");
     }
 
-    const soilQuality = (land.soilQuality as any) || { fertility: 50, hydration: 50 };
+    const soilQuality = (land.soilQuality as any) || {
+      fertility: 50,
+      hydration: 50,
+    };
 
     return {
       id: land.id,
       plotIndex: land.plotIndex,
       userId: land.userId,
       soilQuality,
-      plant: land.plant ? {
-        id: land.plant.id,
-        type: land.plant.type,
-        stage: land.plant.stage,
-        plantedAt: land.plant.plantedAt,
-        interactions: land.plant.interactions,
-        waterCount: land.plant.waterCount,
-        isHarvestable: land.plant.isHarvestable,
-      } : null,
+      plant: land.plant
+        ? {
+          id: land.plant.id,
+          type: land.plant.type,
+          stage: land.plant.stage,
+          plantedAt: land.plant.plantedAt,
+          interactions: land.plant.interactions,
+          waterCount: land.plant.waterCount,
+          isHarvestable: land.plant.isHarvestable,
+        }
+        : null,
       createdAt: land.createdAt,
       updatedAt: land.updatedAt,
     };
@@ -649,7 +736,7 @@ export class PlantService {
     // Get current land count
     const existingLands = await this.prisma.land.findMany({
       where: { userId },
-      orderBy: { plotIndex: 'desc' },
+      orderBy: { plotIndex: "desc" },
     });
 
     const nextPlotIndex = existingLands.length;
@@ -675,7 +762,9 @@ export class PlantService {
         data: { balanceGold: { decrement: landCost } },
       });
 
-      this.logger.log(`User ${userId} purchased land plot ${nextPlotIndex} for ${landCost} gold`);
+      this.logger.log(
+        `User ${userId} purchased land plot ${nextPlotIndex} for ${landCost} gold`
+      );
     }
 
     // Create new land
@@ -687,6 +776,28 @@ export class PlantService {
       },
     });
 
+    this.eventEmitter.emit("land.updated", {
+      userId,
+      land: newLand,
+    });
+
+    if (nextPlotIndex > 0) {
+      // Need to fetch user balance again to emit accurate balance?
+      // Or just calculate.
+      // Let's fetch the user to be safe and accurate for the event.
+      const updatedUser = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { balanceGold: true, balanceGem: true }
+      });
+      if (updatedUser) {
+        this.eventEmitter.emit("currency.updated", {
+          userId,
+          gold: updatedUser.balanceGold,
+          gem: updatedUser.balanceGem,
+        });
+      }
+    }
+
     return {
       success: true,
       land: {
@@ -695,9 +806,10 @@ export class PlantService {
         soilQuality: newLand.soilQuality,
       },
       cost: nextPlotIndex > 0 ? 1000 : 0,
-      message: nextPlotIndex === 0
-        ? '🎉 Welcome! Your first land is free!'
-        : `🏞️ Purchased land plot ${nextPlotIndex + 1} for 1000 gold!`,
+      message:
+        nextPlotIndex === 0
+          ? "🎉 Welcome! Your first land is free!"
+          : `🏞️ Purchased land plot ${nextPlotIndex + 1} for 1000 gold!`,
     };
   }
 
@@ -729,6 +841,14 @@ export class PlantService {
 
     this.logger.log(`User ${userId} cleared land ${landId}, removed ${plantStage} ${plantType} plant`);
 
+    this.eventEmitter.emit("land.updated", {
+      userId,
+      land: {
+        ...land,
+        plant: null,
+      }
+    });
+
     return {
       success: true,
       land: {
@@ -751,33 +871,38 @@ export class PlantService {
     const lands = await this.prisma.land.findMany({
       where: { userId },
       include: { plant: true },
-      orderBy: { plotIndex: 'asc' },
+      orderBy: { plotIndex: "asc" },
     });
 
     const summary = {
       totalLands: lands.length,
-      emptyLands: lands.filter(l => !l.plant).length,
-      occupiedLands: lands.filter(l => l.plant).length,
-      plantsByStage: lands.reduce((acc, l) => {
-        if (l.plant) {
-          acc[l.plant.stage] = (acc[l.plant.stage] || 0) + 1;
-        }
-        return acc;
-      }, {} as Record<string, number>),
+      emptyLands: lands.filter((l) => !l.plant).length,
+      occupiedLands: lands.filter((l) => l.plant).length,
+      plantsByStage: lands.reduce(
+        (acc, l) => {
+          if (l.plant) {
+            acc[l.plant.stage] = (acc[l.plant.stage] || 0) + 1;
+          }
+          return acc;
+        },
+        {} as Record<string, number>
+      ),
     };
 
     return {
-      lands: lands.map(land => ({
+      lands: lands.map((land) => ({
         id: land.id,
         plotIndex: land.plotIndex,
         soilQuality: land.soilQuality,
-        plant: land.plant ? {
-          id: land.plant.id,
-          type: land.plant.type,
-          stage: land.plant.stage,
-          plantedAt: land.plant.plantedAt,
-          interactions: land.plant.interactions,
-        } : null,
+        plant: land.plant
+          ? {
+            id: land.plant.id,
+            type: land.plant.type,
+            stage: land.plant.stage,
+            plantedAt: land.plant.plantedAt,
+            interactions: land.plant.interactions,
+          }
+          : null,
       })),
       summary,
     };
@@ -792,7 +917,7 @@ export class PlantService {
     if (plant.stage === "DIGGING" && plant.diggingStartedAt) {
       const diggingEndTime = new Date(
         plant.diggingStartedAt.getTime() +
-        plant.diggingDuration * 60 * 60 * 1000,
+        plant.diggingDuration * 60 * 60 * 1000
       );
 
       if (now >= diggingEndTime) {
@@ -813,7 +938,7 @@ export class PlantService {
     if (plant.stage === "GROWING" && plant.growingStartedAt) {
       const growingEndTime = new Date(
         plant.growingStartedAt.getTime() +
-        plant.growingDuration * 60 * 60 * 1000,
+        plant.growingDuration * 60 * 60 * 1000
       );
 
       if (now >= growingEndTime) {
@@ -841,7 +966,9 @@ export class PlantService {
       where: {
         stage: "GROWING",
         lastInteractedAt: {
-          lt: new Date(now.getTime() - PLANT_CONSTANTS.WILT_HOURS * 60 * 60 * 1000),
+          lt: new Date(
+            now.getTime() - PLANT_CONSTANTS.WILT_HOURS * 60 * 60 * 1000
+          ),
         },
       },
     });

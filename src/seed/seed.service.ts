@@ -24,11 +24,10 @@ export class SeedService {
       orderBy: { createdAt: "desc" },
     });
 
-    // Transform to match old format for backward compatibility
     return seedItems.map((item) => ({
       id: item.id,
       userId: item.userId,
-      type: item.itemType.replace("SEED_", ""), // SEED_COMMON -> COMMON
+      type: item.itemType.replace("SEED_", ""),
       rarity: this.getRarityFromType(item.itemType),
       quantity: item.amount,
       createdAt: item.createdAt,
@@ -38,9 +37,8 @@ export class SeedService {
 
   /**
    * Add seed to inventory_items
-   * @param type - Seed type (e.g., 'COMMON', 'RARE') - will be stored as 'SEED_COMMON'
    */
-  async addSeed(userId: string, type: string, rarity: string = "COMMON") {
+  async addSeed(userId: string, type: string, _rarity: string = "COMMON") {
     const itemType = `SEED_${type.toUpperCase()}`;
 
     return this.prisma.inventoryItem.upsert({
@@ -60,7 +58,6 @@ export class SeedService {
 
   /**
    * Consume seed from inventory_items
-   * @param type - Seed type (e.g., 'COMMON', 'RARE') - will look for 'SEED_COMMON'
    */
   async consumeSeed(userId: string, type: string) {
     const itemType = `SEED_${type.toUpperCase()}`;
@@ -99,17 +96,15 @@ export class SeedService {
 
     if (!algaeFruit || algaeFruit.amount < 5) {
       throw new BadRequestException(
-        "You need 5 ALGAE fruits to craft MUSHROOM seed",
+        "You need 5 ALGAE fruits to craft MUSHROOM seed"
       );
     }
 
-    // Consume 5 ALGAE fruits
     await this.prisma.inventoryItem.update({
       where: { id: algaeFruit.id },
       data: { amount: { decrement: 5 } },
     });
 
-    // Add MUSHROOM seed
     const seed = await this.addSeed(userId, "MUSHROOM", "COMMON");
 
     return {
@@ -119,9 +114,6 @@ export class SeedService {
     };
   }
 
-  /**
-   * Get rarity from seed item type
-   */
   private getRarityFromType(itemType: string): string {
     if (itemType.includes("LEGENDARY")) return "LEGENDARY";
     if (itemType.includes("EPIC")) return "EPIC";

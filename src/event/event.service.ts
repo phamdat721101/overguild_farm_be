@@ -19,21 +19,87 @@ export class EventService {
 
   // Offline meetup reward box drop rates (matching image spec)
   private readonly OFFLINE_REWARD_TABLE = [
-    { itemType: "SEED_TREE", amount: 1, probability: 3, name: "SEED (Hạt Giống)", icon: "🌳" },
-    { itemType: "FERTILIZER_RARE", amount: 1, probability: 5, name: "Thuốc Tăng Trưởng Trung Cấp", icon: "💊" },
-    { itemType: "SEED_MUSHROOM", amount: 2, probability: 10, name: "Bào Tử Nấm x2", icon: "🍄🍄" },
-    { itemType: "SEED_MUSHROOM", amount: 1, probability: 15, name: "Bào Tử Nấm x1", icon: "🍄" },
-    { itemType: "SEED_ALGAE", amount: 3, probability: 20, name: "Mầm Tảo x3", icon: "🌿🌿🌿" },
-    { itemType: "GEM", amount: 50, probability: 12, name: "Gem x50", icon: "💎" },
-    { itemType: "GOLD", amount: 300, probability: 35, name: "Vàng x300", icon: "🪙" },
+    {
+      itemType: "SEED_TREE",
+      amount: 1,
+      probability: 3,
+      name: "SEED (Hạt Giống)",
+      icon: "🌳",
+    },
+    {
+      itemType: "FERTILIZER_RARE",
+      amount: 1,
+      probability: 5,
+      name: "Thuốc Tăng Trưởng Trung Cấp",
+      icon: "💊",
+    },
+    {
+      itemType: "SEED_MUSHROOM",
+      amount: 2,
+      probability: 10,
+      name: "Bào Tử Nấm x2",
+      icon: "🍄🍄",
+    },
+    {
+      itemType: "SEED_MUSHROOM",
+      amount: 1,
+      probability: 15,
+      name: "Bào Tử Nấm x1",
+      icon: "🍄",
+    },
+    {
+      itemType: "SEED_ALGAE",
+      amount: 3,
+      probability: 20,
+      name: "Mầm Tảo x3",
+      icon: "🌿🌿🌿",
+    },
+    {
+      itemType: "GEM",
+      amount: 50,
+      probability: 12,
+      name: "Gem x50",
+      icon: "💎",
+    },
+    {
+      itemType: "GOLD",
+      amount: 300,
+      probability: 35,
+      name: "Vàng x300",
+      icon: "🪙",
+    },
   ];
 
   // Valid offline check-in codes (can be moved to database later)
-  private readonly VALID_CODES = new Map<string, { eventName: string; expiresAt: Date }>([
-    ["BANGKOK2025", { eventName: "OverGuild Bangkok Meetup", expiresAt: new Date("2025-12-31") }],
-    ["SAIGON2025", { eventName: "OverGuild Saigon Meetup", expiresAt: new Date("2025-12-31") }],
-    ["HANOI2025", { eventName: "OverGuild Hanoi Meetup", expiresAt: new Date("2025-12-31") }],
-    ["TESTCODE", { eventName: "Test Event", expiresAt: new Date("2030-12-31") }],
+  private readonly VALID_CODES = new Map<
+    string,
+    { eventName: string; expiresAt: Date }
+  >([
+    [
+      "BANGKOK2025",
+      {
+        eventName: "OverGuild Bangkok Meetup",
+        expiresAt: new Date("2025-12-31"),
+      },
+    ],
+    [
+      "SAIGON2025",
+      {
+        eventName: "OverGuild Saigon Meetup",
+        expiresAt: new Date("2025-12-31"),
+      },
+    ],
+    [
+      "HANOI2025",
+      {
+        eventName: "OverGuild Hanoi Meetup",
+        expiresAt: new Date("2025-12-31"),
+      },
+    ],
+    [
+      "TESTCODE",
+      { eventName: "Test Event", expiresAt: new Date("2030-12-31") },
+    ],
   ]);
 
   constructor(
@@ -121,7 +187,7 @@ export class EventService {
     }
 
     // Reward: Add 3 SEED_COMMON to inventory
-    const seedReward = await this.prisma.inventoryItem.upsert({
+    const existingSeedItem = await this.prisma.inventoryItem.findUnique({
       where: {
         userId_itemType_location: {
           userId,
@@ -129,15 +195,20 @@ export class EventService {
           location: "STORAGE",
         },
       },
-      create: {
-        userId,
-        itemType: "SEED_COMMON",
-        amount: 3,
-      },
-      update: {
-        amount: { increment: 3 },
-      },
     });
+
+    const seedReward = existingSeedItem
+      ? await this.prisma.inventoryItem.update({
+        where: { id: existingSeedItem.id },
+        data: { amount: { increment: 3 } },
+      })
+      : await this.prisma.inventoryItem.create({
+        data: {
+          userId,
+          itemType: "SEED_COMMON",
+          amount: 3,
+        },
+      });
 
     // Mark check-in (to prevent duplicates)
     await this.prisma.inventoryItem.create({
@@ -220,7 +291,7 @@ export class EventService {
     const reward = this.rollOfflineReward();
 
     // Give reward to user
-    await this.prisma.inventoryItem.upsert({
+    const existingRewardItem = await this.prisma.inventoryItem.findUnique({
       where: {
         userId_itemType_location: {
           userId,
@@ -228,15 +299,22 @@ export class EventService {
           location: "STORAGE",
         },
       },
-      create: {
-        userId,
-        itemType: reward.itemType,
-        amount: reward.amount,
-      },
-      update: {
-        amount: { increment: reward.amount },
-      },
     });
+
+    if (existingRewardItem) {
+      await this.prisma.inventoryItem.update({
+        where: { id: existingRewardItem.id },
+        data: { amount: { increment: reward.amount } },
+      });
+    } else {
+      await this.prisma.inventoryItem.create({
+        data: {
+          userId,
+          itemType: reward.itemType,
+          amount: reward.amount,
+        },
+      });
+    }
 
     // Mark code as used
     await this.prisma.inventoryItem.create({

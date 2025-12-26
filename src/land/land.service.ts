@@ -6,12 +6,16 @@ import {
 } from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
 import { AssignSeedDto } from "./dto/assign-seed.dto";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 
 @Injectable()
 export class LandService {
   private readonly logger = new Logger(LandService.name);
 
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly eventEmitter: EventEmitter2
+  ) { }
 
   /**
    * Get user's land by wallet address
@@ -120,6 +124,14 @@ export class LandService {
         githubCommits: 0,
         isGoldBranch: false,
       },
+    });
+
+    this.eventEmitter.emit("land.updated", {
+      userId: user.id,
+      land: {
+        ...land,
+        plant: plant,
+      }
     });
 
     return {

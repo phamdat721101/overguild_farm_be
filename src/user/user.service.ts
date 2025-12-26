@@ -2,10 +2,14 @@ import { Injectable, BadRequestException } from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
 import { UpdateProfileDto } from "./dto/update-profile.dto";
 import { AddCurrencyDto, CurrencyType } from "./dto/add-currency.dto";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 
 @Injectable()
 export class UserService {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly eventEmitter: EventEmitter2
+  ) { }
 
   async getProfile(userId: string) {
     return this.prisma.user.findUnique({
@@ -110,6 +114,12 @@ export class UserService {
         balanceGold: true,
         balanceGem: true,
       },
+    });
+
+    this.eventEmitter.emit("currency.updated", {
+      userId,
+      gold: updated.balanceGold,
+      gem: updated.balanceGem,
     });
 
     return {

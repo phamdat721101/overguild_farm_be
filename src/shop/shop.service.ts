@@ -19,6 +19,9 @@ import { GoldShopPurchaseDto } from "./dto/gold-shop-purchase.dto";
 import { GemShopPurchaseDto } from "./dto/gem-shop-purchase.dto";
 import { CashShopPurchaseDto } from "./dto/cash-shop-purchase.dto";
 
+import { EventEmitter2 } from "@nestjs/event-emitter";
+// ... imports
+
 @Injectable()
 export class ShopService {
   private readonly goldItems = GOLD_SHOP_ITEMS;
@@ -29,7 +32,8 @@ export class ShopService {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly inventoryService: InventoryService,
-    private readonly progressionService: ProgressionService
+    private readonly progressionService: ProgressionService,
+    private readonly eventEmitter: EventEmitter2
   ) { }
 
   /**
@@ -187,7 +191,7 @@ export class ShopService {
     const purchase = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.findUnique({
         where: { id: userId },
-        select: { id: true, balanceGold: true, xp: true },
+        select: { id: true, balanceGold: true, xp: true, balanceGem: true }, // Added balanceGem for event
       });
 
       if (!user) {
@@ -249,19 +253,26 @@ export class ShopService {
 
       // Add item to inventory if reward is defined (use tx for transaction consistency)
       if (config.reward?.itemType && config.reward?.amount) {
-        await tx.inventoryItem.upsert({
+        const existingItem = await tx.inventoryItem.findUnique({
           where: {
             userId_itemType_location: { userId, itemType: config.reward.itemType, location: "STORAGE" },
           },
-          create: {
-            userId,
-            itemType: config.reward.itemType,
-            amount: config.reward.amount,
-          },
-          update: {
-            amount: { increment: config.reward.amount },
-          },
         });
+
+        if (existingItem) {
+          await tx.inventoryItem.update({
+            where: { id: existingItem.id },
+            data: { amount: { increment: config.reward.amount } },
+          });
+        } else {
+          await tx.inventoryItem.create({
+            data: {
+              userId,
+              itemType: config.reward.itemType,
+              amount: config.reward.amount,
+            },
+          });
+        }
       }
 
       // Handle special exchange item
@@ -308,9 +319,25 @@ export class ShopService {
       return {
         record,
         newBalanceGold: user.balanceGold - finalPrice,
+        userGemBalance: user.balanceGem,
         finalPrice,
+        rewardItem: config.reward ? { itemType: config.reward.itemType, amount: config.reward.amount } : null
       };
     });
+
+    // Emit events after transaction
+    this.eventEmitter.emit("currency.updated", {
+      userId,
+      gold: purchase.newBalanceGold,
+      gem: purchase.userGemBalance, // Need to return this from tx or fetch it
+    });
+
+    if (purchase.rewardItem) {
+      this.eventEmitter.emit("inventory.updated", {
+        userId,
+        item: purchase.rewardItem
+      });
+    }
 
     return {
       success: true,
@@ -440,6 +467,7 @@ export class ShopService {
     }
 
     const purchase = await this.prisma.$transaction(async (tx) => {
+      let createdLand: any = null;
       const user = await tx.user.findUnique({
         where: { id: userId },
         select: { id: true, balanceGem: true, balanceGold: true },
@@ -515,13 +543,14 @@ export class ShopService {
           }
 
           // Create new land with auto-generated UUID
-          await tx.land.create({
+          const newLand = await tx.land.create({
             data: {
               userId,
               plotIndex: newPlotIndex,
               soilQuality: { fertility: 50, hydration: 50 },
             },
           });
+          createdLand = newLand; // Capture for return
         }
       }
 
@@ -539,8 +568,23 @@ export class ShopService {
         record,
         newBalanceGem: user.balanceGem - config.priceGem,
         newBalanceGold: user.balanceGold + (config.reward?.gold || 0),
+        newLand: createdLand
       };
     });
+
+    // Emit events
+    this.eventEmitter.emit("currency.updated", {
+      userId,
+      gold: purchase.newBalanceGold, // Gems purchase can give gold
+      gem: purchase.newBalanceGem
+    });
+
+    if (purchase.newLand) {
+      this.eventEmitter.emit("land.updated", {
+        userId,
+        land: purchase.newLand
+      });
+    }
 
     return {
       success: true,
@@ -606,6 +650,7 @@ export class ShopService {
             select: { plotIndex: true },
             orderBy: { plotIndex: "asc" },
           },
+          balanceGold: true // Added for event
         },
       });
 
@@ -636,7 +681,14 @@ export class ShopService {
       return {
         record,
         newBalanceGem: user.balanceGem + (config.reward?.gems || 0),
+        userGoldBalance: user.balanceGold // Need for event
       };
+    });
+
+    this.eventEmitter.emit("currency.updated", {
+      userId,
+      gem: purchase.newBalanceGem,
+      gold: purchase.userGoldBalance
     });
 
     return {

@@ -96,7 +96,7 @@ export class ProgressionService {
     // Tìm next level config (level cao hơn đầu tiên)
     const nextLevelConfig =
       this.LEVEL_CONFIGS.find(
-        (cfg) => cfg.requiredXp > currentLevelConfig.requiredXp,
+        (cfg) => cfg.requiredXp > currentLevelConfig.requiredXp
       ) ?? maxConfig;
 
     const nextLevelXp = nextLevelConfig.requiredXp;
@@ -140,7 +140,7 @@ export class ProgressionService {
     // Áp dụng phần thưởng items (nếu có)
     if (levelConfig.rewards.items) {
       for (const item of levelConfig.rewards.items) {
-        await this.prisma.inventoryItem.upsert({
+        const existingItem = await this.prisma.inventoryItem.findUnique({
           where: {
             userId_itemType_location: {
               userId,
@@ -148,15 +148,22 @@ export class ProgressionService {
               location: "STORAGE",
             },
           },
-          create: {
-            userId,
-            itemType: item.type,
-            amount: item.amount,
-          },
-          update: {
-            amount: { increment: item.amount },
-          },
         });
+
+        if (existingItem) {
+          await this.prisma.inventoryItem.update({
+            where: { id: existingItem.id },
+            data: { amount: { increment: item.amount } },
+          });
+        } else {
+          await this.prisma.inventoryItem.create({
+            data: {
+              userId,
+              itemType: item.type,
+              amount: item.amount,
+            },
+          });
+        }
       }
     }
 

@@ -14,12 +14,16 @@ import {
 } from "./constants/inventory-locations";
 import { MoveToBackpackDto } from "./dto/move-to-backpack.dto";
 import { MoveToStorageDto } from "./dto/move-to-storage.dto";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 
 @Injectable()
 export class InventoryService {
   private readonly logger = new Logger(InventoryService.name);
 
-  constructor(private readonly prisma: PrismaClient) { }
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly eventEmitter: EventEmitter2
+  ) { }
 
   /**
    * Get user's complete inventory with filtering
@@ -155,9 +159,15 @@ export class InventoryService {
 
     this.logger.log(`Added ${dto.amount}x ${dto.itemType} to user ${userId} at ${targetLocation}`);
 
+    const enrichedItem = this.enrichItemData(item);
+    this.eventEmitter.emit("inventory.updated", {
+      userId,
+      items: [enrichedItem],
+    });
+
     return {
       success: true,
-      item: this.enrichItemData(item),
+      item: enrichedItem,
       message: `Added ${dto.amount}x ${dto.itemType} to ${targetLocation.toLowerCase()}`,
     };
   }
@@ -194,6 +204,25 @@ export class InventoryService {
     this.logger.log(
       `Removed ${dto.amount}x ${dto.itemType} from user ${userId}`
     );
+
+    if (updatedItem) {
+      this.eventEmitter.emit("inventory.updated", {
+        userId,
+        items: [this.enrichItemData(updatedItem)],
+      });
+    } else {
+      // Item removed completely, sending update with 0 amount or handling deletion on FE
+      // For now, let's just trigger update.
+      // Ideally we might want to send the deleted ID or state.
+      // But re-fetching might be safer if we don't send simplified events.
+      // Let's send a specific event or just the item with 0 amount if needed,
+      // but here we don't have the object anymore if deleted.
+      // We can send the previous item ID with 0 amount to signal deletion if we want.
+      this.eventEmitter.emit("inventory.updated", {
+        userId,
+        items: [{ ...this.enrichItemData(item), amount: 0 }],
+      });
+    }
 
     return {
       success: true,
@@ -250,19 +279,25 @@ export class InventoryService {
       }
 
       // Add to recipient
-      const recipientItem = await tx.inventoryItem.upsert({
+      const existingRecipientItem = await tx.inventoryItem.findUnique({
         where: {
           userId_itemType_location: { userId: recipient.id, itemType: dto.itemType, location: InventoryLocation.STORAGE },
         },
-        create: {
-          userId: recipient.id,
-          itemType: dto.itemType,
-          amount: dto.amount,
-        },
-        update: {
-          amount: { increment: dto.amount },
-        },
       });
+
+      const recipientItem = existingRecipientItem
+        ? await tx.inventoryItem.update({
+          where: { id: existingRecipientItem.id },
+          data: { amount: { increment: dto.amount } },
+        })
+        : await tx.inventoryItem.create({
+          data: {
+            userId: recipient.id,
+            itemType: dto.itemType,
+            amount: dto.amount,
+            location: InventoryLocation.STORAGE,
+          },
+        });
 
       return { recipientItem };
     });
@@ -270,6 +305,20 @@ export class InventoryService {
     this.logger.log(
       `User ${senderId} transferred ${dto.amount}x ${dto.itemType} to ${recipient.id} (${recipient.walletAddress})`
     );
+
+    this.eventEmitter.emit("inventory.updated", {
+      userId: senderId,
+      items: [
+        senderItem.amount === dto.amount
+          ? { ...this.enrichItemData(senderItem), amount: 0 }
+          : { ...this.enrichItemData(senderItem), amount: senderItem.amount - dto.amount }
+      ],
+    });
+
+    this.eventEmitter.emit("inventory.updated", {
+      userId: recipient.id,
+      items: [this.enrichItemData(result.recipientItem)],
+    });
 
     return {
       success: true,
@@ -518,9 +567,15 @@ export class InventoryService {
       `User ${userId} moved ${dto.amount}x ${dto.itemType} from storage to backpack`
     );
 
+    const enrichedBackpackItem = this.enrichItemData(result.backpackItem);
+    this.eventEmitter.emit("inventory.updated", {
+      userId,
+      items: [enrichedBackpackItem],
+    });
+
     return {
       success: true,
-      item: this.enrichItemData(result.backpackItem),
+      item: enrichedBackpackItem,
       message: `Moved ${dto.amount}x ${dto.itemType} to backpack`,
     };
   }
@@ -586,9 +641,15 @@ export class InventoryService {
       `User ${userId} moved ${dto.amount}x ${dto.itemType} from backpack to storage`
     );
 
+    const enrichedStorageItem = this.enrichItemData(result.storageItem);
+    this.eventEmitter.emit("inventory.updated", {
+      userId,
+      items: [enrichedStorageItem],
+    });
+
     return {
       success: true,
-      item: this.enrichItemData(result.storageItem),
+      item: enrichedStorageItem,
       message: `Moved ${dto.amount}x ${dto.itemType} to storage`,
     };
   }

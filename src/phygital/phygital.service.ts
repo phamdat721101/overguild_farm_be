@@ -17,7 +17,7 @@ type ResourceBalances = Record<PhygitalResourceType, number>;
 @Injectable()
 export class PhygitalService {
   private readonly rewardMap = new Map(
-    PHYGITAL_REWARD_CATALOG.map((reward) => [reward.key, reward]),
+    PHYGITAL_REWARD_CATALOG.map((reward) => [reward.key, reward])
   );
 
   constructor(private readonly prisma: PrismaClient) { }
@@ -53,11 +53,11 @@ export class PhygitalService {
     }
 
     const costOption = reward.costs.find(
-      (cost) => cost.resource === dto.paymentType,
+      (cost) => cost.resource === dto.paymentType
     );
     if (!costOption) {
       throw new BadRequestException(
-        "This reward does not support the selected resource type",
+        "This reward does not support the selected resource type"
       );
     }
 
@@ -75,7 +75,7 @@ export class PhygitalService {
 
       if (!inventoryItem || inventoryItem.amount < costOption.amount) {
         throw new BadRequestException(
-          `Not enough ${resourceMeta.label}. Required ${costOption.amount}, you have ${inventoryItem?.amount || 0}`,
+          `Not enough ${resourceMeta.label}. Required ${costOption.amount}, you have ${inventoryItem?.amount || 0}`
         );
       }
 
@@ -138,7 +138,7 @@ export class PhygitalService {
     };
 
     const itemTypes = Object.values(RESOURCE_CONFIG).map(
-      (config) => config.itemType,
+      (config) => config.itemType
     );
 
     const items = await this.prisma.inventoryItem.findMany({

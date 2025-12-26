@@ -20,6 +20,9 @@ import { InventoryModule } from "./inventory/inventory.module";
 import { PhygitalModule } from "./phygital/phygital.module";
 import { ShopModule } from "./shop/shop.module";
 import { StreakModule } from "./streak/streak.module";
+import { FriendModule } from './friend/friend.module';
+import { ChatModule } from './chat/chat.module';
+import { SocketModule } from './gateway/socket.module';
 
 @Module({
   imports: [
@@ -52,8 +55,11 @@ import { StreakModule } from "./streak/streak.module";
     PhygitalModule,
     ShopModule,
     StreakModule,
+    FriendModule,
+    ChatModule,
+    SocketModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }

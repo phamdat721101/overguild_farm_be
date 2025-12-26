@@ -40,6 +40,13 @@ model User {
   referrerId          String?              @map("referrer_id")
   referrer            User?                @relation("Referrals", fields: [referrerId], references: [id])
   referrals           User[]               @relation("Referrals")
+  
+  sentFriendRequests     FriendRequest[]   @relation("SentRequests")
+  receivedFriendRequests FriendRequest[]   @relation("ReceivedRequests")
+  friendships1           Friendship[]      @relation("User1Friendships")
+  friendships2           Friendship[]      @relation("User2Friendships")
+  sentMessages           Message[]         @relation("SentMessages")
+  conversationMembers    ConversationMember[]
 
   @@map("users")
 }
@@ -233,4 +240,79 @@ model StreakCheckin {
 
   @@index([userId, checkinAt])
   @@map("streak_checkins")
+}
+
+model FriendRequest {
+  id         String   @id @default(dbgenerated("gen_random_uuid()"))
+  senderId   String   @map("sender_id")
+  receiverId String   @map("receiver_id")
+  status     String   @default("PENDING") // PENDING, ACCEPTED, REJECTED
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  
+  sender   User @relation("SentRequests", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("ReceivedRequests", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId])
+  @@index([receiverId, status])
+  @@index([senderId, status])
+  @@map("friend_requests")
+}
+
+model Friendship {
+  id        String   @id @default(dbgenerated("gen_random_uuid()"))
+  user1Id   String   @map("user1_id")
+  user2Id   String   @map("user2_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  user1 User @relation("User1Friendships", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2 User @relation("User2Friendships", fields: [user2Id], references: [id], onDelete: Cascade)
+
+  @@unique([user1Id, user2Id])
+  @@index([user1Id])
+  @@index([user2Id])
+  @@map("friendships")
+}
+
+model Conversation {
+  id        String   @id @default(dbgenerated("gen_random_uuid()"))
+  type      String   @default("DIRECT") // DIRECT or GROUP
+  name      String?  // For group chats
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  members  ConversationMember[]
+  messages Message[]
+
+  @@map("conversations")
+}
+
+model ConversationMember {
+  id             String    @id @default(dbgenerated("gen_random_uuid()"))
+  conversationId String    @map("conversation_id")
+  userId         String    @map("user_id")
+  joinedAt       DateTime  @default(now()) @map("joined_at")
+  lastReadAt     DateTime? @map("last_read_at")
+  
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@map("conversation_members")
+}
+
+model Message {
+  id             String   @id @default(dbgenerated("gen_random_uuid()"))
+  conversationId String   @map("conversation_id")
+  senderId       String   @map("sender_id")
+  content        String
+  type           String   @default("TEXT") // TEXT, IMAGE, FILE
+  createdAt      DateTime @default(now()) @map("created_at")
+  
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
 }

@@ -84,7 +84,7 @@ export class FertilizerService {
   async applyFertilizer(
     userId: string,
     landId: string,
-    fertilizerType: string,
+    fertilizerType: string
   ) {
     // Validate land ownership
     const land = await this.prisma.land.findFirst({
@@ -98,7 +98,7 @@ export class FertilizerService {
 
     if (!land.plant) {
       throw new BadRequestException(
-        "No plant on this land. Plant a seed first!",
+        "No plant on this land. Plant a seed first!"
       );
     }
 
@@ -108,7 +108,7 @@ export class FertilizerService {
 
     if (land.plant.stage === "FRUIT") {
       throw new BadRequestException(
-        "Plant is ready to harvest! Apply fertilizer after harvesting.",
+        "Plant is ready to harvest! Apply fertilizer after harvesting."
       );
     }
 
@@ -208,7 +208,7 @@ export class FertilizerService {
 
     if (!fruits || fruits.amount < fruitAmount) {
       throw new BadRequestException(
-        `You don't have enough fruits. You have ${fruits?.amount || 0}, need ${fruitAmount}`,
+        `You don't have enough fruits. You have ${fruits?.amount || 0}, need ${fruitAmount}`
       );
     }
 
@@ -218,7 +218,7 @@ export class FertilizerService {
 
     // Try to create highest rarity first
     const sortedRates = Object.entries(this.COMPOST_RATES).sort(
-      (a, b) => b[1] - a[1],
+      (a, b) => b[1] - a[1]
     ); // Sort descending by fruit cost
 
     for (const [fertilizerType, fruitCost] of sortedRates) {
@@ -231,7 +231,7 @@ export class FertilizerService {
 
     if (rewards.length === 0) {
       throw new BadRequestException(
-        `Not enough fruits to create fertilizer. Minimum: ${Math.min(...Object.values(this.COMPOST_RATES))} fruits`,
+        `Not enough fruits to create fertilizer. Minimum: ${Math.min(...Object.values(this.COMPOST_RATES))} fruits`
       );
     }
 
@@ -243,23 +243,30 @@ export class FertilizerService {
 
     // Add fertilizer rewards
     for (const reward of rewards) {
-      await this.prisma.inventoryItem.upsert({
+      const existingItem = await this.prisma.inventoryItem.findUnique({
         where: {
           userId_itemType_location: { userId, itemType: reward.type, location: "STORAGE" },
         },
-        create: {
-          userId,
-          itemType: reward.type,
-          amount: reward.amount,
-        },
-        update: {
-          amount: { increment: reward.amount },
-        },
       });
+
+      if (existingItem) {
+        await this.prisma.inventoryItem.update({
+          where: { id: existingItem.id },
+          data: { amount: { increment: reward.amount } },
+        });
+      } else {
+        await this.prisma.inventoryItem.create({
+          data: {
+            userId,
+            itemType: reward.type,
+            amount: reward.amount,
+          },
+        });
+      }
     }
 
     this.logger.log(
-      `User ${userId} composted ${fruitAmount} fruits, received: ${rewards.map((r) => `${r.amount}x ${r.type}`).join(", ")}`,
+      `User ${userId} composted ${fruitAmount} fruits, received: ${rewards.map((r) => `${r.amount}x ${r.type}`).join(", ")}`
     );
 
     return {

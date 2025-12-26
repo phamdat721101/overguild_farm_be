@@ -103,7 +103,7 @@ export class MissionService {
   constructor(
     private readonly prisma: PrismaClient,
     @Inject(forwardRef(() => SoulboundTokenService))
-    private readonly soulboundTokenService: SoulboundTokenService,
+    private readonly soulboundTokenService: SoulboundTokenService
   ) { }
 
   /**
@@ -175,7 +175,7 @@ export class MissionService {
   async updateProgress(
     userId: string,
     missionType: MissionType,
-    increment: number = 1,
+    increment: number = 1
   ) {
     const mission = await this.prisma.mission.findFirst({
       where: {
@@ -245,19 +245,26 @@ export class MissionService {
     // Add item rewards
     if (config.reward.items) {
       for (const item of config.reward.items) {
-        await this.prisma.inventoryItem.upsert({
+        const existingItem = await this.prisma.inventoryItem.findUnique({
           where: {
             userId_itemType_location: { userId, itemType: item.type, location: "STORAGE" },
           },
-          create: {
-            userId,
-            itemType: item.type,
-            amount: item.amount,
-          },
-          update: {
-            amount: { increment: item.amount },
-          },
         });
+
+        if (existingItem) {
+          await this.prisma.inventoryItem.update({
+            where: { id: existingItem.id },
+            data: { amount: { increment: item.amount } },
+          });
+        } else {
+          await this.prisma.inventoryItem.create({
+            data: {
+              userId,
+              itemType: item.type,
+              amount: item.amount,
+            },
+          });
+        }
       }
     }
 
@@ -284,12 +291,12 @@ export class MissionService {
         where: { id: missionId },
       });
       this.logger.log(
-        `Deleted ${config.resetPeriod} mission ${mission.missionType} for user ${userId}`,
+        `Deleted ${config.resetPeriod} mission ${mission.missionType} for user ${userId}`
       );
     }
 
     this.logger.log(
-      `User ${userId} claimed reward for mission ${mission.missionType}`,
+      `User ${userId} claimed reward for mission ${mission.missionType}`
     );
 
     // Check and issue badges (mission-related)
