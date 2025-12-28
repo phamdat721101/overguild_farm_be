@@ -47,6 +47,14 @@ model User {
   friendships2           Friendship[]      @relation("User2Friendships")
   sentMessages           Message[]         @relation("SentMessages")
   conversationMembers    ConversationMember[]
+  
+  // P2P Marketplace
+  sentTrades             TradeRequest[]    @relation("SentTrades")
+  receivedTrades         TradeRequest[]    @relation("ReceivedTrades")
+  tradeItems             TradeItem[]       @relation("TradeItemOwner")
+  tradeCurrencies        TradeCurrency[]   @relation("TradeCurrencyOwner")
+  sellerListings         MarketListing[]   @relation("SellerListings")
+  buyerListings          MarketListing[]   @relation("BuyerListings")
 
   @@map("users")
 }
@@ -315,4 +323,100 @@ model Message {
 
   @@index([conversationId, createdAt])
   @@map("messages")
+}
+
+
+// ==================== P2P MARKETPLACE ====================
+
+// Trade request between two players (Ngọc Rồng style)
+model TradeRequest {
+  id                String    @id @default(dbgenerated("gen_random_uuid()"))
+  senderId          String    @map("sender_id")
+  receiverId        String    @map("receiver_id")
+  status            String    @default("PENDING") // PENDING, ACCEPTED, COMPLETED, CANCELLED, EXPIRED
+  senderConfirmed   Boolean   @default(false) @map("sender_confirmed")
+  receiverConfirmed Boolean   @default(false) @map("receiver_confirmed")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  expiresAt         DateTime  @map("expires_at")
+  
+  sender     User            @relation("SentTrades", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver   User            @relation("ReceivedTrades", fields: [receiverId], references: [id], onDelete: Cascade)
+  items      TradeItem[]
+  currencies TradeCurrency[]
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([status])
+  @@map("trade_requests")
+}
+
+// Items in a trade
+model TradeItem {
+  id        String   @id @default(dbgenerated("gen_random_uuid()"))
+  tradeId   String   @map("trade_id")
+  ownerId   String   @map("owner_id")
+  itemType  String   @map("item_type")
+  amount    Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  trade TradeRequest @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  owner User         @relation("TradeItemOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([tradeId])
+  @@map("trade_items")
+}
+
+// Currency (gold/gem) in a trade
+model TradeCurrency {
+  id           String   @id @default(dbgenerated("gen_random_uuid()"))
+  tradeId      String   @map("trade_id")
+  ownerId      String   @map("owner_id")
+  currencyType String   @map("currency_type") // GOLD, GEM
+  amount       Int      @default(0)
+  createdAt    DateTime @default(now()) @map("created_at")
+  
+  trade TradeRequest @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  owner User         @relation("TradeCurrencyOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([tradeId])
+  @@map("trade_currencies")
+}
+
+// Marketplace listing (sạp hàng)
+model MarketListing {
+  id        String    @id @default(dbgenerated("gen_random_uuid()"))
+  sellerId  String    @map("seller_id")
+  itemType  String    @map("item_type")
+  amount    Int       @default(1)
+  priceGold Int?      @map("price_gold")
+  priceGem  Int?      @map("price_gem")
+  status    String    @default("ACTIVE") // ACTIVE, SOLD, CANCELLED
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  soldAt    DateTime? @map("sold_at")
+  buyerId   String?   @map("buyer_id")
+  
+  seller User  @relation("SellerListings", fields: [sellerId], references: [id], onDelete: Cascade)
+  buyer  User? @relation("BuyerListings", fields: [buyerId], references: [id], onDelete: SetNull)
+
+  @@index([sellerId])
+  @@index([status])
+  @@index([itemType])
+  @@map("market_listings")
+}
+
+// Trade history log
+model TradeLog {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()"))
+  tradeId             String?  @map("trade_id")
+  listingId           String?  @map("listing_id")
+  type                String   // P2P_TRADE, MARKET_PURCHASE
+  user1Id             String   @map("user1_id")
+  user2Id             String?  @map("user2_id")
+  itemsExchanged      Json?    @map("items_exchanged")
+  currenciesExchanged Json?    @map("currencies_exchanged")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  @@map("trade_logs")
 }

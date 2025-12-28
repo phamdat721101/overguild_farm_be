@@ -22,6 +22,7 @@ import { ShopModule } from "./shop/shop.module";
 import { StreakModule } from "./streak/streak.module";
 import { FriendModule } from './friend/friend.module';
 import { ChatModule } from './chat/chat.module';
+import { TradeModule } from './trade/trade.module';
 import { SocketModule } from './gateway/socket.module';
 
 @Module({
@@ -57,6 +58,7 @@ import { SocketModule } from './gateway/socket.module';
     StreakModule,
     FriendModule,
     ChatModule,
+    TradeModule,
     SocketModule,
   ],
   controllers: [AppController],
